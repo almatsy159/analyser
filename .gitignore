@@ -1,0 +1,14 @@
+
+__pycache__/
+data/
+
+*.db
+setting.*
+setup.*
+.pyc
+.venv/
+log.*
+gpt_conv_links.txt
+save/
+*.lock
+*.egg_info

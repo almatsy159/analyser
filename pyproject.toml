@@ -1,0 +1,64 @@
+# ===========================
+# Informations du projet
+# ===========================
+[project]
+name = "analyser"
+version = "0.1.0"
+description = "Projet innovant d'analyse"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Gaëtan Lecomte", email = "gaetan@example.com" }
+]
+keywords = ["python", "analyse", "pgm"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent"
+]
+dependencies = [
+    "flask>=3.1.2",
+    "imageio>=2.37.0",
+    "joblib>=1.5.2",
+    "loguru>=0.7.3",
+    "mss>=10.1.0",
+    "pillow>=11.3.0",
+    "pynput>=1.8.1",
+    "pyqt5>=5.15.11",
+    "pytest>=8.4.2",
+    "requests>=2.32.5",
+    "scikit-learn>=1.7.2",
+    "spacy>=3.8.7",
+]
+
+# ===========================
+# Build system
+# ===========================
+[build-system]
+requires = ["setuptools>=65.5.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# ===========================
+# Outils de développement
+# ===========================
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+line_length = 88
+known_first_party = ["pgm"]
+
+[tool.mypy]
+python_version = 3.10
+check_untyped_defs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "--strict-markers -ra"
+testpaths = ["tests"]
