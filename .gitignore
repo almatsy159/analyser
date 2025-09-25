@@ -11,4 +11,4 @@ log.*
 gpt_conv_links.txt
 save/
 *.lock
-*.egg_info
+*.egg-info
