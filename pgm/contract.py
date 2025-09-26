@@ -1,12 +1,15 @@
-
+import os
+import io
 # --------------------------
 # Structures for each direction
 # --------------------------
-ui_to_handler = {
-    "file": str,
+ui_to_handler_data = {
     "process": str,
     "sid": int,
     "cid": int
+}
+ui_to_handler_file = {
+    "image": (os.PathLike,io.BytesIO,str)
 }
 
 handler_to_ui = {
@@ -20,9 +23,9 @@ class ContentStructure:
         self.content = content
         self.structure = structure
         self.extracted = {}
-        self.validate_content()
+        self.validate_data()
 
-    def validate_content(self):
+    def validate_data(self):
         missing_keys = [k for k in self.structure if k not in self.content]
         if missing_keys:
             raise KeyError(f"Missing keys: {missing_keys}")
@@ -41,10 +44,13 @@ class ContentStructure:
 # --------------------------
 # Direction-specific wrappers
 # --------------------------
-class UI_to_Handler(ContentStructure):
+class UI_to_Handler_Data(ContentStructure):
     def __init__(self, content):
-        super().__init__(content, ui_to_handler)
+        super().__init__(content, ui_to_handler_data)
 
+class UI_to_Handler_File(ContentStructure):
+    def __init__(self, content):
+        super().__init__(content, ui_to_handler_file)
 class Handler_to_UI(ContentStructure):
     def __init__(self, content):
         super().__init__(content, handler_to_ui)

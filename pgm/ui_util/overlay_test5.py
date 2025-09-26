@@ -24,11 +24,12 @@ import socket
 import connection
 
 #import sqlite3
-#from loguru import logger
+#from loguru import logger v
 from pgm.ui_util.log import log,init_log
 from pgm.ui_util.db import Database
-import pgm.contract
+import pgm.contract as ct
 
+import time
 init_log()
 
 default_infos = {"title": "my article review","author":"glecomte","numbers":[0,1,2,3],"sub_dict":{"revelance":0,"global_score":0,"sub_list":[2,3,5,7,11]}}
@@ -120,6 +121,7 @@ class Capture:
                 mss.tools.to_png(self.sct_img.rgb, self.sct_img.size, output=self.f_path)
             
             #self.context.db.add_capture()
+
     def write_into_db(self):
         # to edit both here and db ...
         self.context.db.add_capture(self.session,self.app)
@@ -147,14 +149,19 @@ class Sender:
         self.captures[id_capture] = capture
     
     def send_capture(self,capture,cid=None):
+        log("d",f"in send capture , to send {cid}")
 
         buf = io.BytesIO()
         iio.imwrite(buf, capture.img, format='PNG')
         buf.seek(0)
         files = {"image":(capture.f_path,buf,f"image/{capture.ext}")}
         data = {"context":self.context.to_json(),"process":self.process,"sid":[self.sender_id,self.sender_id2],"cid":cid}
+        
+        # validate data following contract constraint 
+        #ct.ui_to_handler_data(data)
         flag = False
         try :
+            print(f"sending capture {cid}")
             response = requests.post(handler_addr,files=files,data=data)
             flag = True
 
@@ -172,13 +179,18 @@ class Sender:
         cpt = 0
         total = {"True":0,"False":0}
         for cid,c in self.captures.items():
+            print(f"in sendall , should send capture {cid}")
             cpt +=1
             self.send_capture(c,cid)
+        self.captures = {}
             #print(res)
             #total[res] +=1
         #print(total)
         #return total
 
+
+def to_trigger():
+    print("capture triggered")
 
 def capture_window(window_info,context,process=None,save_dir="data/img"):
     log("d",f"context : {context},\nwindow_ifno : {window_info}")
@@ -298,6 +310,10 @@ def listen_keyboard(qwidget,task_queue,context):
 
     pressed = set()
 
+    def stop_capture():
+        #qwidget.comm.update_capture_state.emit()
+        qwidget.comm.update_timer.emit(0)
+
     def change_mod():
         log("i","changing mode")
         qwidget.comm.update_mod.emit()
@@ -313,13 +329,40 @@ def listen_keyboard(qwidget,task_queue,context):
         #task_queue.put((capture_window,(window_info,context)))
         cap = Capture(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
         sender = Sender(context)
+        # may take sender as attribute ? so instead of add capture , once in cap.capture it add capture automatically at the end (avoid potential conflict in the queue (calling sender with unexisting capture ?))
         task_queue.put((cap.capture,("args to test","arg2 to test")))
         #cap.add_to_sender(sender)
         sender.add_capture(cap.idc,cap)
         log("d",f"sender captures {sender.captures}")
         task_queue.put((sender.send_all,("arg1","arg2")))
 
-
+    def capture_multiple():
+        first,second = wait_for_two_clicks()
+        log("s",f"first : {first} ; second : {second}")
+        window_info = capture_info(first,second)
+        log("s",f"window info {window_info}")
+        # should call an action in the queue
+        #log("d",f"{qwidget.capture_state}")
+        
+        #qwidget.comm.update_capture_state.emit()
+        #timer = QTimer()
+        #timer.setInterval(100)
+        #timer.timeout.connect(to_trigger)v
+        cap = Capture(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
+        #sender = Sender(context)
+        qwidget.comm.update_capture.emit(cap)
+        qwidget.comm.update_timer.emit(100)
+        #timer.start()
+        #log("d",f"{qwidget.capture_state}")
+        # tmp comment to test Sender/Capture
+        #task_queue.put((capture_window,(window_info,context)))
+        # should open a thread that wait for a signal stop signal ...
+        """
+        while qwidget.capture_state == True:
+            
+            print("capturing")
+            time.sleep(0.5)
+        """
 
 
 
@@ -341,11 +384,16 @@ def listen_keyboard(qwidget,task_queue,context):
             log("d","wait for action launched !")
             action_key = wait_for_action()
         if action_key:
+            # capture_multiple and stop_capture may trigger wait_capture ?v
             log("d",f"action {action_key} should be triggered")
             if action_key == keyboard.KeyCode.from_char("c"):
                 capture()
             elif action_key == keyboard.KeyCode.from_char("m"):
                 change_mod()
+            elif action_key == keyboard.KeyCode.from_char("v"):
+                capture_multiple()
+            elif action_key == keyboard.KeyCode.from_char("s"):
+                stop_capture()
         pressed.discard(key)
         return context
 
@@ -439,6 +487,9 @@ class Communicate(QObject):
     update_text = pyqtSignal(dict)
     update_mod = pyqtSignal()
     update_infos = pyqtSignal(dict)
+    update_capture_state = pyqtSignal()
+    update_timer = pyqtSignal(int)
+    update_capture = pyqtSignal(Capture)
 
 
 class DisplayInfo(QWidget):
@@ -598,7 +649,7 @@ class SocketServerThread(threading.Thread):
                             
                         
 class Overlay(QWidget):
-    def __init__(self,context,db=None, text="Overlay HUD", x=100, y=100, w=400, h=400,display_dict=None):
+    def __init__(self,context,task_queue,db=None, text="Overlay HUD", x=100, y=100, w=400, h=400,display_dict=None,max_capture=10):
         super().__init__()
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool)
 
@@ -611,12 +662,24 @@ class Overlay(QWidget):
         self.text = text
         self.display_dict = display_dict
         
+        self.capture_state = False
         
         self.comm = Communicate()
         
         self.comm.update_text.connect(self.set_text2)
         self.comm.update_mod.connect(self.change_mod)
         self.comm.update_infos.connect(self.set_display_widget_infos)
+        self.comm.update_capture_state.connect(self.change_capture_state)
+        self.comm.update_timer.connect(self.set_timer)
+        self.comm.update_capture.connect(self.update_capture)
+
+        self.timer = None
+        self.current_capture = None
+        self.task_queue = task_queue
+        self.my_sender = None
+        self.number_capture = 0
+        self.max_capture = max_capture
+        self.packet_send = 0
 
 
         self.context = context
@@ -651,6 +714,66 @@ class Overlay(QWidget):
 
         self.create_interface()
         self.generate_interface()
+    
+    def update_capture(self,capture):
+        self.current_capture = capture
+    
+    def set_timer(self,ms=0):
+        self.my_sender = Sender(self.context)
+        if ms !=0:
+            if self.timer == None:
+                self.timer = QTimer()
+                self.timer.setInterval(ms)
+                self.timer.timeout.connect(self.to_trigger)
+                self.timer.start()
+        else:
+            if self.timer != None:
+                self.timer.stop()
+                self.timer = None
+                self.current_capture = None
+                self.my_sender = None
+                self.number_capture = 0
+                self.packet_send = 0
+    
+    def to_trigger(self):
+        flag = False
+        self.number_capture += 1
+        self.task_queue.put((self.current_capture.capture,()))
+        self.my_sender.add_capture(self.number_capture,self.current_capture)
+        self.current_capture = Capture(self.current_capture.user,self.current_capture.session,
+                                       self.current_capture.window_name,datetime.now(),
+                                       self.current_capture.pos,self.current_capture.size,
+                                       self.current_capture.context,
+                                       save=True)
+        """
+        if self.packet_send > 0:v
+            if self.number_capture//self.packet_send == self.max_capture:
+                flag = True
+        else :
+            if self.number_capture == self.max_capture:
+                flag = True
+
+        if flag == True:
+            self.task_queue.put((self.my_sender.send_all,()))
+            self.packet_send +=1
+        """
+        log("i",f"len sender captures = {len(self.my_sender.captures)}")
+        if len(self.my_sender.captures) >= self.max_capture:
+            self.task_queue.put((self.my_sender.send_all, ()))
+            #vself.my_sender.captures = {}
+            self.packet_send += 1
+
+        print("triggering capture")
+
+    def change_capture_state(self,state):
+        """
+        if self.capture_state == True:
+            self.capture_state = False
+        else :
+            self.capture_state = True
+        """
+        self.capture_state = state
+        
 
     def get_display_dict_str(self):
         res = ""
@@ -911,7 +1034,7 @@ def main(window,user_id="test"):
         log("s",f"Fenêtre active : {window['name']} ({window['size'][0]}x{window['size'][1]})")
         app_qt = QApplication(sys.argv)
         display_dict = context.__dict__.copy()
-        overlay = Overlay(text="",x=1400,y=600,context=context,display_dict=display_dict)
+        overlay = Overlay(task_queue=task_queue,text="",x=1400,y=600,context=context,display_dict=display_dict)
         listen_keyboard(overlay,task_queue,context)
         listen_mouse(overlay,task_queue,context)
         overlay.show()
