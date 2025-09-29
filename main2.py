@@ -3,6 +3,7 @@ from pgm.ui_util.overlay import *
 import re 
 import time
 import json
+import subprocess
 
 def get_filename_only(path):
     filename_without_ext = ""
@@ -82,6 +83,10 @@ def generate_ds_from_txt(path="/home/alma/analyser/data/"):
 drop_dir("cv2")
 drop_dir("models")
 drop_dir("txt")
-drop_dir("img")
 """
+#drop_dir("img")
+
+
+
+
 

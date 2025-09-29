@@ -71,7 +71,16 @@ class Reciever:
         # add content of previous one ?
         pass
     
+
+
+class Reciever_Handler:
+    def __init__(self):
+        self.recievers={}
     
+    def add_reciever(self,reciever):
+        for i,j in self.recievers.items():
+            if i == reciever.rid:
+                pass
 
 @app.route("/portal",methods=["POST"])
 def portal():
@@ -89,6 +98,11 @@ def portal():
         response = Response(status=500,text=f"route {data['process']} not implemented yet")
 
     return jsonify({"status":response.status,"message":response.text})
+
+
+@app.route("/aggregate")
+def aggregate():
+    pass
 
 
 @app.route("/process_image",methods=["POST"])
@@ -116,6 +130,7 @@ def send_data_to_overlay(data, host='127.0.0.1', port=5002):
     print("data to send : ",data)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((host, port))
+        #s.sendall(f"{data}".encode)
         s.sendall(data.encode())
         #s.sendall(data)
 
@@ -141,12 +156,13 @@ def cv_txt():
     #send_data_to_overlay(data)
     #send_data_to_overlay("processing text")
     
-    #result = {"result":make_prompt(data),"from_server":"done"}
+    result = {"result":make_prompt(data),"from_server":"done"}
     #result = '{"result":{"title":"here is a test","message":"here shoud be the answer of the llm","dict":{"revelance":0,"score":0}},"from_server":{"message":0,"wait_for":0}}'
-    result = '{"title":"here is a test","message":"here shoud be the answer of the llm","dict":{"revelance":0,"score":0}}'
+    #result = '{"title":"here is a test","message":"here shoud be the answer of the llm","dict":{"revelance":0,"score":0}}'
     #result = make_prompt(data)
     
     #print(result)
+    result = f"{result}"
     send_data_to_overlay(result)
     
 
