@@ -12,3 +12,6 @@ gpt_conv_links.txt
 save/
 *.lock
 *.egg-info
+
+!setup.py
+!log.py
