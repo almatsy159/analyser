@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication,QScrollArea, QLabel,QLineEdit, QWidget, QToolButton,QVBoxLayout, QHBoxLayout, QSizePolicy, QTabWidget, QListWidget, QMenuBar, QAction, QDockWidget,QMenu,QTreeWidget,QTreeWidgetItem
+from PyQt5.QtWidgets import QApplication,QScrollArea,QPushButton, QLabel,QLineEdit, QWidget, QToolButton,QVBoxLayout, QHBoxLayout, QSizePolicy, QTabWidget, QListWidget, QMenuBar, QAction, QDockWidget,QMenu,QTreeWidget,QTreeWidgetItem
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject,QPoint
 from PyQt5.QtGui import QFont
 import subprocess
@@ -31,6 +31,8 @@ import pgm.contract as ct
 
 import time
 import hashlib
+
+from display_test3 import DisplayInfo as DI
 
 
 init_log()
@@ -537,21 +539,63 @@ class Communicate(QObject):
     update_capture = pyqtSignal(Capture)
 
 
+class TestWidget(QWidget):
+    def __init__(self,infos, parent=None,xi=100,yi=100,w=200,h=200):
+        super().__init__(parent)
+        self.xi,self.yi = xi,yi
+        self.w,self.h = w,h
+  
+        self.setGeometry(self.xi,self.yi,self.w,self.h)
+        #self.setWindowFlags(Qt.Tool)
+        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+
+        self.main_layout = QVBoxLayout()
+        self.setLayout(self.main_layout)
+        self.infos= infos
+        self.generate_view(self.infos)
+
+        
+
+        #self._drag_active = False
+        #self._drag_position = QPoint()
+
+    def create_info_widget(self,my_dict):
+        container = QWidget()
+        container.setObjectName("container")
+        vbox = QVBoxLayout(container)
+        test_button = QPushButton(text="am i clickable ?")
+        vbox.addWidget(test_button)
+
+        return container
+
+
+
+    def generate_view(self, info_dict=None):
+ 
+        info_widget = self.create_info_widget(info_dict)
+        self.main_layout.addWidget(info_widget)
+        self.adjustSize()
+        self.show()
+
+    
+
 
 class DisplayInfo(QWidget):
     def __init__(self, infos,parent=None,xi=100,yi=100,w=200,h=200):
         super().__init__(parent)
         #self.parent 
         #self.setWindowTitle("Nested Accordion DisplayInfo")
-        self.setStyleSheet("background-color: #2b2b2b; color: white;")
+        #self.setStyleSheet("background-color: #2b2b2b; color: white;")
         self.xi,self.yi = xi,yi
         self.w,self.h = w,h
         #self.setMinimumSize(200, 300)
-        self.move(self.xi,self.yi)
+        #self.move(self.xi,self.yi)
 
         #self.resize(600, 400)
         self.setGeometry(self.xi,self.yi,self.w,self.h)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        #self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setWindowFlags(Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
 
         self.main_layout = QVBoxLayout()
@@ -570,11 +614,12 @@ class DisplayInfo(QWidget):
 
 
         self.generate_view(self.infos)
+        #self.adjustSize()
         self.adjustSize()
-        
 
         self._drag_active = False
         self._drag_position = QPoint()
+        #print(self.findChildren(QWidget))
 
     def create_info_widget(self, my_dict):
 
@@ -633,7 +678,7 @@ class DisplayInfo(QWidget):
                 toggle.toggled.connect(on_toggle)
 
             else:
-                label = QLabel(f"{k}: {v}",self)
+                label = QLabel(f"{k}: {v}")
                 vbox.addWidget(label)
 
         # Wrap content in a scroll area
@@ -682,214 +727,6 @@ class DisplayInfo(QWidget):
         self.generate_view()
 
 
-class DisplayInfo2(QWidget):
-    def __init__(self,infos=None,parent=None,xi=500,yi=500,w=500,h=500):
-
-        super().__init__(parent)
-        self.h = h
-        self.w = w
-        self.xi = xi
-        self.yi = yi
-        
-        self.setGeometry(self.xi,self.yi,self.w,self.h)
-        self.move(self.xi,self.yi)
-        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.Tool)
-        #self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        #self.setAttribute(Qt.WA_TransparentForMouseEvents,False)
-        
-        self.main_layout = QVBoxLayout()
-        self.main_layout.setContentsMargins(5, 5, 5, 5)
-        self.main_layout.setSpacing(5)
-        self.setLayout(self.main_layout)
-        
-        if infos == None:
-            self.infos = {}
-        else:
-            self.infos = infos
-        self.generate_view(self.infos)
-        
-        self.adjustSize()
-        self._drag_active = False
-        self._drag_position = QPoint()
-    
-    def create_info_widget(self, my_dict=None, previous_layout=None):
-        if my_dict is None:
-            my_dict = {}
-
-        container_widget = QWidget(self)
-        container_layout = QVBoxLayout(container_widget)
-        container_layout.setSpacing(5)
-        container_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-
-        for k, v in my_dict.items():
-            line_widget = QWidget(self)
-            line_layout = QVBoxLayout(line_widget)
-            line_layout.setSpacing(2)
-            line_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-
-            if isinstance(v, dict):
-                # Create a collapsible button for nested dictionaries
-                toggle_button = QToolButton(self)
-                toggle_button.setStyleSheet("color: #00aaff; font-weight: bold;")
-                toggle_button.setText(str(k))
-                toggle_button.setCheckable(True)
-                toggle_button.setChecked(False)
-                toggle_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-                toggle_button.setArrowType(Qt.RightArrow)
-
-                # Sub-widget for nested content
-                sub_widget = self.create_info_widget(v)
-                sub_widget.setVisible(False)  # start collapsed
-                sub_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-
-                # on_toggle must also force geometry/layout recalculation so parent resizes
-                def on_toggle(checked, widget=sub_widget, button=toggle_button):
-                    widget.setVisible(checked)
-                    button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-                    # Ask Qt to recalculate sizes up the chain so the top-level DisplayInfo shrinks/grows
-                    widget.adjustSize()
-                    widget.updateGeometry()
-                    # 'self' is DisplayInfo; make sure it and all parents adjust
-                    cur = self
-                    """
-                    while cur is not None:
-                        try:
-                            cur.adjustSize()
-                            cur.updateGeometry()
-                            cur = cur.parent()
-                        except Exception:
-                            break
-                """
-                toggle_button.toggled.connect(on_toggle)
-
-                line_layout.addWidget(toggle_button)
-                line_layout.addWidget(sub_widget)
-            else:
-                # Regular key-value line
-                h_layout = QHBoxLayout()
-                key_label = QLabel(str(k), self)
-                key_label.setStyleSheet("color: #00aaff; font-weight: bold;")
-                value_label = QLabel(str(v), self)
-                value_label.setStyleSheet("color: white;")
-                value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-                h_layout.addWidget(key_label)
-                h_layout.addWidget(value_label)
-                line_layout.addLayout(h_layout)
-
-            # Line container widget
-            line_container = QWidget(self)
-            line_container.setLayout(line_layout)
-            line_container.setStyleSheet("""
-                background-color: rgba(0, 0, 100, 150);
-                border-radius: 6px;
-            """)
-            line_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-
-            container_layout.addWidget(line_container)
-            #self.adjustSize()
-
-        return container_widget
-
-
-    def create_info_widget2(self, my_dict=None, previous_layout=None):
-        if my_dict is None:
-            my_dict = {}
-
-        container_widget = QWidget()
-        container_layout = QVBoxLayout(container_widget)
-        #container_layout.setSpacing(5)
-
-        for k, v in my_dict.items():
-            line_widget = QWidget()
-            line_layout = QVBoxLayout(line_widget)
-            line_layout.setSpacing(2)
-
-            if isinstance(v, dict):
-                # Create a collapsible button for nested dictionaries
-                toggle_button = QToolButton()
-                toggle_button.setStyleSheet("color: #00aaff; font-weight: bold;")
-                toggle_button.setText(str(k))
-                toggle_button.setCheckable(True)
-                toggle_button.setChecked(False)
-                toggle_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-                toggle_button.setArrowType(Qt.RightArrow)
-
-                # Sub-widget for nested content
-                sub_widget = self.create_info_widget(v)
-                sub_widget.setVisible(False)  # start collapsed
-
-            # Connect toggle
-                def on_toggle(checked, widget=sub_widget, button=toggle_button):
-                    widget.setVisible(checked)
-                    button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-
-                toggle_button.toggled.connect(on_toggle)
-
-                line_layout.addWidget(toggle_button)
-                line_layout.addWidget(sub_widget)
-            else:
-                # Regular key-value line
-                h_layout = QHBoxLayout()
-                key_label = QLabel(str(k))
-                key_label.setStyleSheet("color: #00aaff; font-weight: bold;")
-                value_label = QLabel(str(v))
-                value_label.setStyleSheet("color: white;")
-                value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-                h_layout.addWidget(key_label)
-                h_layout.addWidget(value_label)
-                #h_layout.addStretch()
-                line_layout.addLayout(h_layout)
-
-            #line_layout.addStretch()
-
-            # Line container widget
-            line_widget = QWidget()
-            #line_widget.setAttribute(Qt.WA_TransparentForMouseEvents,True)
-            line_widget.setLayout(line_layout)
-            line_widget.setStyleSheet("""
-                background-color: rgba(0, 0, 100, 150);
-                border-radius: 6px;
-            """)
-            #line_widget.adjustSize()
-            #container_widget.adjustSize()
-            container_layout.addWidget(line_widget)
-
-        return container_widget
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self._drag_active = True
-            self._drag_position = event.globalPos() - self.frameGeometry().topLeft()
-            event.accept()
-
-    def mouseMoveEvent(self, event):
-        if self._drag_active and event.buttons() & Qt.LeftButton:
-            self.move(event.globalPos() - self._drag_position)
-            event.accept()
-
-    def mouseReleaseEvent(self, event):
-        self._drag_active = False
-
-    
-    def generate_view(self, info_dict=None):
-        if info_dict == None:
-            info_dict = self.infos
-        # Clear previous widgets
-        while self.main_layout.count():
-            child = self.main_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-        
-        info_widget = self.create_info_widget(info_dict)
-        self.main_layout.addWidget(info_widget)
-        #self.adjustSize()
-        self.show()
-
-    def set_infos(self,infos=None):
-        self.infos = infos
-        self.generate_view()
-
 
 class SocketServerThread(threading.Thread):
     def __init__(self, host='127.0.0.1', port=5002, callback=None):
@@ -918,7 +755,31 @@ class SocketServerThread(threading.Thread):
                             # data should be formated this way in handler {"from_server":{"message":x,"wait_for":y},"result":{json}to parse it (method in overlay)
                             self.callback(data_json_decoded)
                             
-                        
+def print_active_flags(widget):
+    flags = widget.windowFlags()  # make sure to call the method
+    flag_mapping = {
+        Qt.Window: "Window",
+        Qt.Dialog: "Dialog",
+        Qt.Popup: "Popup",
+        Qt.Tool: "Tool",
+        Qt.SplashScreen: "SplashScreen",
+        Qt.WindowStaysOnTopHint: "WindowStaysOnTopHint",
+        Qt.FramelessWindowHint: "FramelessWindowHint",
+        Qt.WindowMinimizeButtonHint: "WindowMinimizeButtonHint",
+        Qt.WindowMaximizeButtonHint: "WindowMaximizeButtonHint",
+        Qt.WindowCloseButtonHint: "WindowCloseButtonHint",
+        Qt.WindowSystemMenuHint: "WindowSystemMenuHint",
+        Qt.WindowContextHelpButtonHint: "WindowContextHelpButtonHint",
+    }
+
+    active_flags = []
+    for flag_value, flag_name in flag_mapping.items():
+        if flags & flag_value:
+            active_flags.append(flag_name)
+
+    print(f"Active flags {widget}:", ", ".join(active_flags) if active_flags else "None")
+    return active_flags
+
 class Overlay(QWidget):
     def __init__(self,context,task_queue,db=None, text="Overlay HUD", x=100, y=100, w=400, h=400,display_dict=None,max_capture=10):
         super().__init__()
@@ -975,14 +836,19 @@ class Overlay(QWidget):
         self.server_thread.start()
        
         #self.info_widget = DisplayInfo(self.display_dict)
-        self.info_widget = DisplayInfo({"analyser":self.display_dict})
+        #self.info_widget = TestWidget({"analyser":self.display_dict})
+        #self.info_widget = DisplayInfo({"analyser":self.display_dict})
+        self.info_widget = DI({"analyser":self.display_dict})
         #self.info_widget = DisplayInfo(default_infos)
         #self.info_widget2 = DisplayInfo(default_infos2)
-        #self.info_widget2.setAttribute(Qt.WA_TransparentForMouseEvents,False)
+        #self.info_widget2.setAttribute(Qt.WA_TransparentForMouseEvents,False)m
 
         self.colors = ["red","blue","green"]
         self.mod = 0
         self.mods= {0:"partial",1:"full"}
+
+        #self.last_flags = None
+        #self.last_flags_info = None
 
         self.create_interface()
         self.generate_interface()
@@ -1066,11 +932,47 @@ class Overlay(QWidget):
     def generate_interface(self):
 
         mod = self.mods[self.mod]
-    
+        """
+        active_flags = []
+        flags = self.windowFlags()
+        for flag in [
+    Qt.Window,
+    Qt.Dialog,
+    Qt.Popup,
+    Qt.Tool,
+    Qt.SplashScreen,
+    Qt.WindowStaysOnTopHint,
+    Qt.FramelessWindowHint
+]:
+            if flags & flag:
+                active_flags.append(flag)
+                print(flag)
+            #print(active_flags)
+        """
+        
         if mod == "partial" :
             self.setup_partial_mode()
         elif mod == "full":
             self.setup_full_mode()
+        
+        """
+        current_flag = print_active_flags(self)
+        current_flag_info = print_active_flags(self.info_widget)
+        delta_flag = []
+        delta_flag_info = []
+        if self.last_flagsm_info != None:
+            for flag in current_flag_info :
+                if flag not in self.last_flags_info:
+                    delta_flag_info.append(flag)
+
+        if self.last_flags != None:
+            for flag in current_flag :
+                if flag not in self.last_flags:
+                    delta_flag.append(flag)
+        print(delta_flag,"\n",delta_flag_info)
+        self.last_flags = current_flag
+        self.last_flags_info = current_flag_info
+        """
 
 
     def setup_partial_mode(self):
@@ -1078,9 +980,11 @@ class Overlay(QWidget):
         self.setAttribute(Qt.WA_TransparentForMouseEvents,False) 
         for c in self.info_widget.findChildren(QWidget):
             c.setAttribute(Qt.WA_TransparentForMouseEvents,False)
-        for c in self.info_widget2.findChildren(QWidget):
-            c.setAttribute(Qt.WA_TransparentForMouseEvents,False)
         """
+        #for c in self.info_widget2.findChildren(QWidget):
+        #    c.setAttribute(Qt.WA_TransparentForMouseEvents,False)
+        
+        #mself.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool)m
         self.fullmode.hide()
         self.info_widget.show()
         #self.info_widget2.show()
@@ -1096,7 +1000,7 @@ class Overlay(QWidget):
             c.setAttribute(Qt.WA_TransparentForMouseEvents,False)
         self.fullmode.showMaximized()
         self.info_widget.hide()
-        self.info_widget2.hide()
+        #self.info_widget2.hide()
 
     def set_text2(self,my_dict,color=None):
         """
@@ -1117,7 +1021,7 @@ class Overlay(QWidget):
         self.add_dict_to_info(infos,"infos")
     
     def add_dict_to_info(self,my_dict,name):
-        print(self.display_dict)
+        #print(self.display_dict)
         self.display_dict[name] = my_dict
         self.generate_interface()
 

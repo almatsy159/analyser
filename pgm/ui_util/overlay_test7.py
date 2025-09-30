@@ -32,14 +32,22 @@ import pgm.contract as ct
 import time
 import hashlib
 
+#from display_test3 import DisplayInfo as DI
+from display_widget import DisplayInfo as DI
 
 init_log()
 
 default_infos = {"title": "my article review","author":"glecomte","numbers":[0,1,2,3],"sub_dict":{"revelance":0,"global_score":0,"sub_list":[2,3,5,7,11]}}
 default_infos2 = {"window_name": "default","user":"default"}
 controls = {"action":{keyboard.Key.ctrl,keyboard.Key.alt},
-            "quit":{keyboard.Key.ctrl,keyboard.Key.esc}}
+            "quit":{keyboard.Key.ctrl,keyboard.Key.esc},
+            "escape":{keyboard.Key.esc}}
 
+default_infos3 = {"app":{"tips":{"actions":"to make an action press ctrl+alt then a key in the actions list"},
+                         "shortcuts":{"quit":"ctrl+esc","actions":"ctrl+alt+<key>"},
+                         "actions":{"single capture":"c","feed capture":"f","video capture":"v","stop video caputre":"s"}},
+                "context":{},
+                "infos":{}}
 handler_addr = "http://localhost:5000/process_image"
 handler_portal = "http://localhost:5000/portal"
 handler_aggregate = "http://localhost:5000/aggregate"
@@ -351,34 +359,18 @@ def listen_keyboard(qwidget,task_queue,context):
         window_info = capture_info(first,second)
         log("s",f"window info {window_info}")
         # should call an action in the queue
-        #log("d",f"{qwidget.capture_state}")
-        
-        #qwidget.comm.update_capture_state.emit()
-        #timer = QTimer()
-        #timer.setInterval(100)
-        #timer.timeout.connect(to_trigger)v
+
         cap = Capture(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
-        #sender = Sender(context)
+
         qwidget.comm.update_capture.emit(cap)
         qwidget.comm.update_timer.emit(100)
-        #timer.start()
-        #log("d",f"{qwidget.capture_state}")
-        # tmp comment to test Sender/Capture
-        #task_queue.put((capture_window,(window_info,context)))
-        # should open a thread that wait for a signal stop signal ...
-        """
-        while qwidget.capture_state == True:
-            
-            print("capturing")
-            time.sleep(0.5)
-    m    """
-    
+
     def capture_feed():
         first,second = wait_for_two_clicks()
         window_info = capture_info(first,second)
         sender = Sender(context,addr=handler_aggregate)
         cap = Capture(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
-        #cap.capture()
+
         print("capture 0")
         nb_cap = 0
         sender.add_capture(nb_cap,cap)
@@ -401,7 +393,8 @@ def listen_keyboard(qwidget,task_queue,context):
         listener_mouse.start()
         # f
         
-
+    def escape():
+        qwidget.comm.update_display.emit()
 
 
     def leave_app():
@@ -421,6 +414,8 @@ def listen_keyboard(qwidget,task_queue,context):
         elif controls["action"] == pressed:
             log("d","wait for action launched !")
             action_key = wait_for_action()
+        elif controls["escape"] == pressed:
+            escape()
         if action_key:
             # capture_multiple and stop_capture may trigger wait_capture ?v
             log("d",f"action {action_key} should be triggered")
@@ -529,136 +524,9 @@ class Communicate(QObject):
     update_infos = pyqtSignal(dict)
     update_capture_state = pyqtSignal()
     update_timer = pyqtSignal(int)
+    update_display = pyqtSignal()
     update_capture = pyqtSignal(Capture)
 
-
-class DisplayInfo(QWidget):
-    def __init__(self,infos=None,parent=None,xi=500,yi=500,w=500,h=500):
-
-        super().__init__(parent)
-        self.h = h
-        self.w = w
-        self.xi = xi
-        self.yi = yi
-        
-        self.setGeometry(self.xi,self.yi,self.w,self.h)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        #self.setAttribute(Qt.WA_TransparentForMouseEvents,True)
-        
-        self.main_layout = QVBoxLayout()
-        self.main_layout.setContentsMargins(5, 5, 5, 5)
-        self.main_layout.setSpacing(5)
-        self.setLayout(self.main_layout)
-        
-        if infos == None:
-            self.infos = {}
-        else:
-            self.infos = infos
-        self.generate_view(self.infos)
-        
-        self.adjustSize()
-        self._drag_active = False
-        self._drag_position = QPoint()
-        #print(self.findChildren(QWidget))
-
-    def create_info_widget(self, my_dict=None, previous_layout=None):
-        if my_dict is None:
-            my_dict = {}
-
-        container_widget = QWidget(self)
-        container_layout = QVBoxLayout(container_widget)
-        #container_layout.setSpacing(5)
-
-        for k, v in my_dict.items():
-            line_widget = QWidget(self)
-            line_layout = QVBoxLayout(line_widget)
-            line_layout.setSpacing(2)
-
-            if isinstance(v, dict):
-                # Create a collapsible button for nested dictionaries
-                toggle_button = QToolButton(self)
-                toggle_button.setStyleSheet("color: #00aaff; font-weight: bold;")
-                toggle_button.setText(str(k))
-                toggle_button.setCheckable(True)
-                toggle_button.setChecked(False)
-                toggle_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-                toggle_button.setArrowType(Qt.RightArrow)
-
-                # Sub-widget for nested content
-                sub_widget = self.create_info_widget(v)
-                sub_widget.setVisible(False)  # start collapsed
-
-            # Connect toggle
-                def on_toggle(checked, widget=sub_widget, button=toggle_button):
-                    widget.setVisible(checked)
-                    button.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-
-                toggle_button.toggled.connect(on_toggle)
-
-                line_layout.addWidget(toggle_button)
-                line_layout.addWidget(sub_widget)
-            else:
-                # Regular key-value line
-                h_layout = QHBoxLayout()
-                key_label = QLabel(str(k), self)
-                key_label.setStyleSheet("color: #00aaff; font-weight: bold;")
-                value_label = QLabel(str(v), self)
-                value_label.setStyleSheet("color: white;")
-                value_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-                h_layout.addWidget(key_label)
-                h_layout.addWidget(value_label)
-                #h_layout.addStretch()
-                line_layout.addLayout(h_layout)
-
-            #line_layout.addStretch()
-
-            # Line container widget
-            line_widget = QWidget(self)
-            #line_widget.setAttribute(Qt.WA_TransparentForMouseEvents,True)
-            line_widget.setLayout(line_layout)
-            line_widget.setStyleSheet("""
-                background-color: rgba(0, 0, 100, 150);
-                border-radius: 6px;
-            """)
-            #line_widget.adjustSize()
-            #container_widget.adjustSize()
-            container_layout.addWidget(line_widget)
-
-        return container_widget
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self._drag_active = True
-            self._drag_position = event.globalPos() - self.frameGeometry().topLeft()
-            event.accept()
-
-    def mouseMoveEvent(self, event):
-        if self._drag_active and event.buttons() & Qt.LeftButton:
-            self.move(event.globalPos() - self._drag_position)
-            event.accept()
-
-    def mouseReleaseEvent(self, event):
-        self._drag_active = False
-
-    
-    def generate_view(self, info_dict=None):
-        if info_dict == None:
-            info_dict = self.infos
-        # Clear previous widgets
-        while self.main_layout.count():
-            child = self.main_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
-        
-        info_widget = self.create_info_widget(info_dict)
-        self.main_layout.addWidget(info_widget)
-        self.adjustSize()
-        self.show()
-
-    def set_infos(self,infos=None):
-        self.infos = infos
-        self.generate_view()
 
 
 class SocketServerThread(threading.Thread):
@@ -713,6 +581,9 @@ class Overlay(QWidget):
         self.comm.update_capture_state.connect(self.change_capture_state)
         self.comm.update_timer.connect(self.set_timer)
         self.comm.update_capture.connect(self.update_capture)
+        self.comm.update_display.connect(self.update_display)
+
+        self.display = True
 
         self.timer = None
         self.current_capture = None
@@ -744,11 +615,6 @@ class Overlay(QWidget):
         self.server_thread = SocketServerThread(callback=self.comm.update_infos.emit)
         self.server_thread.start()
        
-        
-        self.info_widget = DisplayInfo(default_infos)
-        self.info_widget2 = DisplayInfo(default_infos2)
-        #self.info_widget2.setAttribute(Qt.WA_TransparentForMouseEvents,False)
-
         self.colors = ["red","blue","green"]
         self.mod = 0
         self.mods= {0:"partial",1:"full"}
@@ -758,6 +624,17 @@ class Overlay(QWidget):
     
     def update_capture(self,capture):
         self.current_capture = capture
+    
+    def update_display(self):
+        if self.mods[self.mod] == "partial":
+            if self.update_display:
+                self.info_widget3.hide()
+            else:
+                self.info_widget3.show()
+            self.update_display = not self.update_display
+            
+
+
     
     def set_timer(self,ms=0):
         self.my_sender = Sender(self.context)
@@ -831,6 +708,7 @@ class Overlay(QWidget):
 
     def create_interface(self):
         self.fullmode = FullModeApp()
+        self.info_widget3 = DI({"analyser":self.display_dict})
 
     def generate_interface(self):
 
@@ -851,8 +729,9 @@ class Overlay(QWidget):
             c.setAttribute(Qt.WA_TransparentForMouseEvents,False)
         """
         self.fullmode.hide()
-        self.info_widget.show()
-        self.info_widget2.show()
+        #self.info_widget.show()
+        #self.info_widget2.show()
+        self.info_widget3.show()
         
         
 
@@ -864,20 +743,33 @@ class Overlay(QWidget):
         for c in self.fullmode.findChildren(QWidget):
             c.setAttribute(Qt.WA_TransparentForMouseEvents,False)
         self.fullmode.showMaximized()
-        self.info_widget.hide()
-        self.info_widget2.hide()
+        #self.info_widget.hide()
+        #self.info_widget2.hide()
+        self.info_widget3.hide()
 
-    def set_text2(self,dict,color=None):
+    def set_text2(self,my_dict,color=None):
+        """
         for k,v in dict.items():
             self.display_dict[k] = v
 
         self.info_widget2.set_infos(self.display_dict)
         self.generate_interface()
+        """
+        self.add_dict_to_info(my_dict,"context")
 
     def set_display_widget_infos(self,infos):
         log("d",f"in infos :{infos}")
-        self.info_widget.set_infos(infos)
+        #self.info_widget.set_infos(infos)
+        #self.generate_interface()
+        self.add_dict_to_info(infos,"infos")
+        #self.info_widget3.set_infos(self.display_dict)
+
+    def add_dict_to_info(self,my_dict,name):
+        #print(self.display_dict)
+        self.display_dict[name] = my_dict
+        self.info_widget3.set_infos(self.display_dict)
         self.generate_interface()
+
 
     def parse_display_widget_infos(self,infos):
         data = infos["result"]
@@ -1075,7 +967,7 @@ def main(window,user_id="test"):
         log("s",f"Fenêtre active : {window['name']} ({window['size'][0]}x{window['size'][1]})")
         app_qt = QApplication(sys.argv)
         display_dict = context.__dict__.copy()
-        overlay = Overlay(task_queue=task_queue,text="",x=1400,y=600,context=context,display_dict=display_dict)
+        overlay = Overlay(task_queue=task_queue,text="",x=1400,y=600,context=context,display_dict=default_infos3)
         listen_keyboard(overlay,task_queue,context)
         #flisten_mouse(overlay,task_queue,context)
         overlay.show()

@@ -4,18 +4,18 @@ from PyQt5.QtCore import Qt
 
 
 class DisplayInfo(QWidget):
-    def __init__(self, infos):
-        super().__init__()
+    def __init__(self, infos,parent=None):
+        super().__init__(parent)
         self.setWindowTitle("Nested Accordion DisplayInfo")
         self.setStyleSheet("background-color: #2b2b2b; color: white;")
 
         layout = QVBoxLayout(self)
-        """
+        
         # Close button at the top
         close_btn = QPushButton("Close", self)
         close_btn.clicked.connect(self.close)
         layout.addWidget(close_btn)
-        """
+        
 
         # Build top-level dict view
         widget = self.create_info_widget(infos)
