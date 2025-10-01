@@ -9,6 +9,7 @@ setup.*
 .venv/
 log.*
 gpt_conv_links.txt
+gpt*
 save/
 *.lock
 *.egg-info

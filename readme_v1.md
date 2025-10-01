@@ -34,7 +34,10 @@ done :ctrl event actually have a critical bug. Need to review the loop !!!
 overlay_test is used to develop feature on overlay while not touching to the working structure of overlay.
 
 to dev :
-almost all feature , an object that allow to recieve data from the various server, a menu to customize setting, hide and block (not sensitive to key/mouse event) option, 
+almost all feature , 
+- an object that allow to recieve data from the various server
+- a menu to customize setting
+- hide and block (not sensitive to key/mouse event) option, 
 
 an option to make the overlay sensitive to event (click)
 
