@@ -1,13 +1,123 @@
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QMenuBar, QMenu, QAction,
-    QTreeWidget, QTreeWidgetItem, QTabWidget, QLabel
+    QTreeWidget, QTreeWidgetItem, QTabWidget, QLabel,QLineEdit
 )
+from PyQt5.QtCore import Qt
 import sys
 
 
 class FullModeApp(QWidget):
-    def __init__(self, parent):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Full Mode App")
+        self.setWindowFlag(Qt.WindowStaysOnTopHint)
+
+        main_layout = QVBoxLayout(self)
+
+        # ---- MenuBar ----
+        self.menu_bar = QMenuBar()
+        file_menu = QMenu("File", self)
+        edit_menu = QMenu("Edit", self)
+        help_menu = QMenu("Help", self)
+
+        new_action = QAction("New Session", self)
+        new_action.triggered.connect(self.new_session)
+        quit_action = QAction("Quit", self)
+        quit_action.triggered.connect(self.close)
+
+        file_menu.addAction(new_action)
+        file_menu.addAction(quit_action)
+        edit_menu.addAction(QAction("Preferences", self))
+        help_menu.addAction(QAction("About", self))
+
+        self.menu_bar.addMenu(file_menu)
+        self.menu_bar.addMenu(edit_menu)
+        self.menu_bar.addMenu(help_menu)
+        main_layout.setMenuBar(self.menu_bar)
+
+        # ---- Central HBox ----
+        central_layout = QHBoxLayout()
+
+        # Left: sessions & captures tree view with search
+        left_layout = QVBoxLayout()
+        
+        # Search bar
+        self.search_bar = QLineEdit()
+        self.search_bar.setPlaceholderText("Filter sessions/captures...")
+        self.search_bar.textChanged.connect(self.filter_tree)
+        left_layout.addWidget(self.search_bar)
+
+        # Tree
+        self.session_tree = QTreeWidget()
+        self.session_tree.setHeaderHidden(True)
+        self.session_tree.itemDoubleClicked.connect(self.open_analysis)
+        left_layout.addWidget(self.session_tree, 1)
+
+        # Example sessions/captures
+        self.populate_tree()
+
+        central_layout.addLayout(left_layout, 1)
+
+        # Right: main tab area
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setTabsClosable(True)
+        self.tab_widget.tabCloseRequested.connect(self.close_tab)
+        central_layout.addWidget(self.tab_widget, 3)
+
+        main_layout.addLayout(central_layout)
+
+    def populate_tree(self):
+        # Clear tree first
+        self.session_tree.clear()
+
+        session1 = QTreeWidgetItem(["Session 1"])
+        QTreeWidgetItem(session1, ["Capture A"])
+        QTreeWidgetItem(session1, ["Capture B"])
+
+        session2 = QTreeWidgetItem(["Session 2"])
+        QTreeWidgetItem(session2, ["Capture X"])
+        QTreeWidgetItem(session2, ["Capture Y"])
+
+        self.session_tree.addTopLevelItem(session1)
+        self.session_tree.addTopLevelItem(session2)
+
+        self.session_tree.expandAll()
+
+    def filter_tree(self, text):
+        text = text.lower()
+        for i in range(self.session_tree.topLevelItemCount()):
+            session_item = self.session_tree.topLevelItem(i)
+            session_visible = False
+            for j in range(session_item.childCount()):
+                capture_item = session_item.child(j)
+                match = text in capture_item.text(0).lower()
+                capture_item.setHidden(not match)
+                if match:
+                    session_visible = True
+            session_item.setHidden(not session_visible)
+
+    # ---- Functions ----
+    def new_session(self):
+        log("i","New session triggered")
+
+    def open_analysis(self, item, column):
+        if item.parent() is None:
+            return
+        analysis_name = f"{item.parent().text(0)} - {item.text(0)}"
+        tab = QLabel(f"Content of {analysis_name}")
+        self.tab_widget.addTab(tab, analysis_name)
+        self.tab_widget.setCurrentWidget(tab)
+
+    def close_tab(self, index):
+        widget = self.tab_widget.widget(index)
+        if widget:
+            self.tab_widget.removeTab(index)
+            widget.deleteLater()
+
+"""
+class FullModeApp(QWidget):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Full Mode App")
         self.resize(1000, 600)
@@ -90,7 +200,7 @@ class FullModeApp(QWidget):
         if widget:
             self.tab_widget.removeTab(index)
             widget.deleteLater()
-
+"""
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

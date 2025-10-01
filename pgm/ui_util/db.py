@@ -1,7 +1,12 @@
 from log import log,init_log
 import sqlite3
+import json
 
 init_log()
+default_user_id = "test" # same in the overlay !
+default_user_mail = "test@test.test"
+default_user_pwd = "test"
+
 
 
 class Database:
@@ -62,7 +67,7 @@ class Database:
                 session_id INTEGER NOT NULL,
                 app_id INTEGER NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                lang TEXT,
+                id_user VARCHAR(100) NOT NULL,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
                 FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE
             );
@@ -74,7 +79,9 @@ class Database:
         cursor.execute(f"SELECT * FROM {table}")
         return cursor.fetchall()
 
-
+    def create_default_user(self):
+        if self.get_user(default_user_id) == None: 
+            self.add_user(default_user_id,default_user_mail,default_user_pwd)
 
     # ---------------- USERS CRUD ----------------
     def add_user(self, idu, email, password):
@@ -136,6 +143,7 @@ class Database:
         return cursor.fetchall()
     
     def get_session(self,idu=None):
+        # get new session
         sessions = self.get_sessions()
         max = 0
         for session_cols in sessions:
@@ -161,6 +169,24 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM apps")
         return cursor.fetchall()
+    
+    def get_app(self,app_id=None,app_name=None):
+        cursor = self.conn.cursor()
+        if app_id==None and app_name == None:
+            return None
+        
+        elif app_id == None:
+            # get app id by name
+            
+            cursor.execute("SELECT * FROM apps WHERE name = ?",(app_name))
+        elif app_name == None:
+            # get app name by id
+        
+            cursor.execute("SELECT * FROM apps WHERE nid = ?",(app_id))
+        
+        return cursor.fetchone()
+
+            
 
     def update_app(self, app_id, name=None, description=None):
         cursor = self.conn.cursor()
@@ -204,16 +230,16 @@ class Database:
         self.conn.commit()
 
     # ---------------- CAPTURES CRUD ----------------
-    def add_capture(self, session_id, app_id, lang=None):
+    def add_capture(self, session_id, app_id, user_id):
         cursor = self.conn.cursor()
         cursor.execute(
-            "INSERT INTO captures (session_id, app_id, lang) VALUES (?, ?, ?)",
-            (session_id, app_id, lang)
+            "INSERT INTO captures (session_id, app_id, user_id) VALUES (?, ?, ?)",
+            (session_id, app_id, user_id)
         )
         self.conn.commit()
         return cursor.lastrowid
 
-    def get_captures(self, session_id=None, app_id=None):
+    def get_captures(self, session_id=None, app_id=None,user_id=None):
         cursor = self.conn.cursor()
         query = "SELECT * FROM captures WHERE 1=1"
         params = []
@@ -223,6 +249,9 @@ class Database:
         if app_id:
             query += " AND app_id=?"
             params.append(app_id)
+        if user_id:
+            query += " AND user_id=?"
+            params.append(user_id)
         cursor.execute(query, tuple(params))
         return cursor.fetchall()
 
@@ -233,6 +262,10 @@ class Database:
 
     def close(self):
         self.conn.close()
+
+    def to_json(self):
+        serializable = {k: (list(v) if isinstance(v, tuple) else v) for k,v in self.__dict__.items()}
+        return json.dumps(serializable)
 
 
 if __name__=="__main__":

@@ -84,7 +84,7 @@ drop_dir("cv2")
 drop_dir("models")
 drop_dir("txt")
 """
-#drop_dir("img")
+drop_dir("img")
 
 
 

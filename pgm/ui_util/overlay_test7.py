@@ -34,18 +34,27 @@ import hashlib
 
 #from display_test3 import DisplayInfo as DI
 from display_widget import DisplayInfo as DI
+from full_mode import FullModeApp as FMA
+from context import Context as CTX
+from capture import Capture as CPT,Sender as SND
 
 init_log()
+
+# to remove once app in prod !
+#c
+default_user_id = "test"
+default_user_mail = "test@test.test"
+default_user_pwd = "test"
+
 
 default_infos = {"title": "my article review","author":"glecomte","numbers":[0,1,2,3],"sub_dict":{"revelance":0,"global_score":0,"sub_list":[2,3,5,7,11]}}
 default_infos2 = {"window_name": "default","user":"default"}
 controls = {"action":{keyboard.Key.ctrl,keyboard.Key.alt},
-            "quit":{keyboard.Key.ctrl,keyboard.Key.esc},
-            "escape":{keyboard.Key.esc}}
+            "quit":{keyboard.Key.ctrl,keyboard.Key.esc}}
 
 default_infos3 = {"app":{"tips":{"actions":"to make an action press ctrl+alt then a key in the actions list"},
                          "shortcuts":{"quit":"ctrl+esc","actions":"ctrl+alt+<key>"},
-                         "actions":{"single capture":"c","feed capture":"f","video capture":"v","stop video caputre":"s"}},
+                         "actions":{"single capture":"c","feed capture":"f","video capture":"v","stop video caputre":"s","escape":"e"}},
                 "context":{},
                 "infos":{}}
 handler_addr = "http://localhost:5000/process_image"
@@ -93,191 +102,6 @@ def worker(task_queue):
                 log("w",f"couldn't do the task {task_queue} : {func} : {err}")
             else :
                 log("s",f"task {task_queue}: {func} effectued successfully")
-
-
-class Capture:
-    def __init__(self,user,session,window_name,timestamp,pos,size,context,ext="png",save=True,f_dir="data/img"):
-        self.context = context
-        self.user = user
-        self.session = session
-        self.window_name = window_name
-        self.timestamp = timestamp
-        self.dir = f_dir
-        #self.img = img
-        self.pos = pos
-        self.size = size
-        self.ext = ext
-        self.filename = f"{self.user}_{self.session}_{self.window_name}_{self.timestamp}.{self.ext}"
-        self.f_path = os.path.join(self.dir, self.filename)
-        if self.size[0] == 0 or self.size[1] == 0:
-            self.size = self.context.window["pos"][0],self.context.window["pos"][1]
-        self.w,self.h = self.size[0],self.size[1]
-        self.x,self.y = self.pos[0],self.pos[1]
-        
-        self.img = None
-        self.sct_img = None
-        # default idc (id capture) and app_id while both are not implemented properly
-        # write capture into db => get_id .
-        self.idc = 0 
-        self.app_id = 0
-
-        self.save = save
-        
-        self.capture()
-        self.im_byte = self.img.tobytes()
-        self.im_hash = hashlib.md5(self.im_byte).hexdigest()
-
-    def capture(self,a1=None,a2=None,*args):
-        with mss.mss() as sct:
-            self.sct_img = sct.grab({"top":self.y,"left":self.x,"width":self.w,"height":self.h})
-            self.img = Image.frombytes("RGB",self.sct_img.size,self.sct_img.rgb)
-            if self.save :
-                mss.tools.to_png(self.sct_img.rgb, self.sct_img.size, output=self.f_path)
-            
-            #self.context.db.add_capture()
-
-    def write_into_db(self):
-        # to edit both here and db ...
-        self.context.db.add_capture(self.session,self.app)
-        self.idc = self.context.db.get_capture()
-    
-    def add_to_sender(self,sender):
-        sender.add_capture(self.idc,self.app_id)
-    
-    def remove_capture(self):
-        os.remove(self.f_path)
-          
-
-class Sender:
-    sid = 0
-    def __init__(self,context,process="default",addr=handler_portal):
-        self.captures = {}
-        self.process = process
-        self.addr = addr
-        self.context = context
-        self.sender_id = Sender.sid
-        self.sender_id2 = self.sid
-        Sender.sid += 1
-        log("d",f"global sid : {Sender.sid} , sid : {self.sender_id} , self sid : {self.sid}, sid2 : {self.sender_id2}") 
-        self.sid += 1
-        log("d",f"global sid : {Sender.sid} , sid : {self.sender_id} , self sid : {self.sid}, sid2 : {self.sender_id2}") 
-    
-    def add_capture(self,id_capture,capture):
-        self.captures[id_capture] = capture
-    
-    def send_capture(self,capture,cid=None):
-        log("d",f"in send capture , to send {cid}")
-
-        buf = io.BytesIO()
-        iio.imwrite(buf, capture.img, format='PNG')
-        buf.seek(0)
-        files = {"image":(capture.f_path,buf,f"image/{capture.ext}")}
-        data = {"context":self.context.to_json(),"process":self.process,"sid":[self.sender_id,self.sender_id2],"cid":cid}
-        
-        # validate data following contract constraint 
-        #ct.ui_to_handler_data(data)
-        flag = False
-        try :
-            print(f"sending capture {cid}")
-            response = requests.post(handler_addr,files=files,data=data)
-            flag = True
-
-        except :
-            response = None
-        finally :
-            if flag == False:
-                log("w","connection couldn't be achieved : capture not sended")
-            else:
-                log("s",f"handler response: {response}")
-
-        #return flag
-    
-    def send_all(self,a1=None,a2=None,*args):
-        cpt = 0
-        total = {"True":0,"False":0}
-        for cid,c in self.captures.items():
-            print(f"in sendall , should send capture {cid}")
-            cpt +=1
-            self.send_capture(c,cid)
-        self.captures = {}
-            #print(res)
-            #total[res] +=1
-        #print(total)
-        #return total
-
-
-def to_trigger():
-    print("capture triggered")
-
-def capture_window(window_info,context,process=None,save_dir="data/img"):
-    log("d",f"context : {context},\nwindow_ifno : {window_info}")
-
-    """Capture la fenêtre active et enregistre l'image."""
-    if not window_info:
-        log("c","Aucune fenêtre active détectée.")
-        return
-
-    x, y = window_info["pos"]
-    w, h = window_info["size"]
-    pos = (x,y)
-    size = (w,h)
-
-    # extract and save img
-
-    os.makedirs(save_dir, exist_ok=True)
-    filename_tmp = f"{context.user}_{context.session}_{context.window_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-    filename = os.path.join(save_dir, filename_tmp)
-
-    if w ==0 or h ==0:
-        log("w","capturing full window")
-        with mss.mss() as sct:
-            sct_img = sct.grab({"top":context.window["pos"][0],"left":context.window["pos"][1],"width":context.window["size"][0],"height":context.window["size"][1]})
-            img = Image.frombytes("RGB",sct_img.size,sct_img.rgb)
-            mss.tools.to_png(sct_img.rgb, sct_img.size, output=filename)
-    else :
-        log("s",f"capturing window and saving it as {filename} into {save_dir}")
-        with mss.mss() as sct:
-            sct_img = sct.grab({"top": y, "left": x, "width": w, "height": h})
-            img = Image.frombytes("RGB",sct_img.size,sct_img.rgb)
-            mss.tools.to_png(sct_img.rgb, sct_img.size, output=filename)
-
-
-        # default process for now
-    sended = None
-    if process == None:
-        log("i","no special process : default process applied")
-        sended = send_image_to_handler(img,filename,context.to_json())
-    else :
-        log("i",f"special process {process}")
-        sended = send_image_to_handler(img,filename,context.to_json(),process)
-
-    if sended == False:
-        log("c","couldn't send the image !should save to send it later !(next connection ? pool_file ?)")
-
-    return filename,save_dir
-
-def send_image_to_handler(img,filename,context,process=[{"name":"test"}],handler_addr=handler_addr):
-        
-        flag = False
-        buf = io.BytesIO()
-        iio.imwrite(buf, img, format='PNG')
-        buf.seek(0)
-        files = {"image":(filename,buf,"image/png")}
-        data = {"context":context.to_json(),"process":process}
-        try :
-            response = requests.post(handler_addr,files=files,data=data)
-            flag = True
-
-        except :
-            response = None
-        finally :
-            if flag == False:
-                log("w","connection couldn't be achieved : capture not sended")
-            else:
-                log("s","handler response:",response)
-
-        return flag
-
 
 def capture_info(first,second):
     pos = first[0] if first[0]<second[0] else second[0],first[1] if first[1]<second[1] else second[1]
@@ -342,10 +166,10 @@ def listen_keyboard(qwidget,task_queue,context):
         log("s",f"first : {first} ; second : {second}")
         window_info = capture_info(first,second)
         log("s",f"window info {window_info}")
-        # tmp comment to test Sender/Capture
+        # tmp comment to test SND/CPT
         #task_queue.put((capture_window,(window_info,context)))
-        cap = Capture(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
-        sender = Sender(context)
+        cap = CPT(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
+        sender = SND(context)
         # may take sender as attribute ? so instead of add capture , once in cap.capture it add capture automatically at the end (avoid potential conflict in the queue (calling sender with unexisting capture ?))
         task_queue.put((cap.capture,("args to test","arg2 to test")))
         #cap.add_to_sender(sender)
@@ -360,7 +184,7 @@ def listen_keyboard(qwidget,task_queue,context):
         log("s",f"window info {window_info}")
         # should call an action in the queue
 
-        cap = Capture(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
+        cap = CPT(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
 
         qwidget.comm.update_capture.emit(cap)
         qwidget.comm.update_timer.emit(100)
@@ -368,8 +192,8 @@ def listen_keyboard(qwidget,task_queue,context):
     def capture_feed():
         first,second = wait_for_two_clicks()
         window_info = capture_info(first,second)
-        sender = Sender(context,addr=handler_aggregate)
-        cap = Capture(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
+        sender = SND(context,addr=handler_aggregate)
+        cap = CPT(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
 
         print("capture 0")
         nb_cap = 0
@@ -383,7 +207,7 @@ def listen_keyboard(qwidget,task_queue,context):
                 nb_cap +=1
                 print(f"capture {nb_cap}")
                 last_cap = cap
-                cap = Capture(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
+                cap = CPT(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
                 if cap.im_hash != last_cap.im_hash:
                     sender.add_capture(nb_cap,cap)
                 else :
@@ -394,6 +218,7 @@ def listen_keyboard(qwidget,task_queue,context):
         # f
         
     def escape():
+        print("in escape ")
         qwidget.comm.update_display.emit()
 
 
@@ -414,8 +239,6 @@ def listen_keyboard(qwidget,task_queue,context):
         elif controls["action"] == pressed:
             log("d","wait for action launched !")
             action_key = wait_for_action()
-        elif controls["escape"] == pressed:
-            escape()
         if action_key:
             # capture_multiple and stop_capture may trigger wait_capture ?v
             log("d",f"action {action_key} should be triggered")
@@ -429,6 +252,8 @@ def listen_keyboard(qwidget,task_queue,context):
                 stop_capture_multiple()
             elif action_key == keyboard.KeyCode.from_char("f"):
                 capture_feed()
+            elif action_key == keyboard.KeyCode.from_char("e"):
+                escape()
         pressed.discard(key)
         return context
 
@@ -486,13 +311,15 @@ def event_appened(context,qwidget=None,to_print=False):
             context.change_window(current)
   
             window_name = context.window_name
+            #app_id = qwidget.db.get_app(app_name=window_name)
+            #context.app_id = app_id
+
             to_display = {"window name : ":window_name}
             qwidget.comm.update_text.emit(to_display)
             context = qwidget.change_ctx(context)
 
     return context
             
-
 def get_active_window():
     """Retourne le nom et la géométrie (x, y, w, h) de la fenêtre active."""
     try:
@@ -516,7 +343,6 @@ def get_active_window():
     except subprocess.CalledProcessError:
         return None
 
-
 class Communicate(QObject):
 
     update_text = pyqtSignal(dict)
@@ -525,9 +351,7 @@ class Communicate(QObject):
     update_capture_state = pyqtSignal()
     update_timer = pyqtSignal(int)
     update_display = pyqtSignal()
-    update_capture = pyqtSignal(Capture)
-
-
+    update_capture = pyqtSignal(CPT)
 
 class SocketServerThread(threading.Thread):
     def __init__(self, host='127.0.0.1', port=5002, callback=None):
@@ -555,8 +379,7 @@ class SocketServerThread(threading.Thread):
                             # try get ifno from data or create a reciever !!
                             # data should be formated this way in handler {"from_server":{"message":x,"wait_for":y},"result":{json}to parse it (method in overlay)
                             self.callback(data_json_decoded)
-                            
-                        
+                                                  
 class Overlay(QWidget):
     def __init__(self,context,task_queue,db=None, text="Overlay HUD", x=100, y=100, w=400, h=400,display_dict=None,max_capture=10):
         super().__init__()
@@ -599,6 +422,10 @@ class Overlay(QWidget):
         #self.db = db
         self.db = Database()
         self.db.create_tables()
+
+        #log("w",f"user : {context.user} ; exist ? : {self.db.get_user(context.user)}")
+        self.db.create_default_user()
+        log("w",f"user : {context.user} ; exist ? : {self.db.get_user(context.user)}")
         
         self.db.add_session(self.context.user)
         log("d",f"sessions : {self.db.get_all_items_from_table('sessions')}")
@@ -622,22 +449,25 @@ class Overlay(QWidget):
         self.create_interface()
         self.generate_interface()
     
-    def update_capture(self,capture):
+    def update_capture(self,capture:CPT):
         self.current_capture = capture
+        self.db.add_capture(capture.session,capture.app_id,capture.user)
     
     def update_display(self):
+        #
+        print(f"in update display : {self.display}")
         if self.mods[self.mod] == "partial":
-            if self.update_display:
+            if self.display:
                 self.info_widget3.hide()
             else:
                 self.info_widget3.show()
-            self.update_display = not self.update_display
+            self.display = not self.display
             
 
 
     
     def set_timer(self,ms=0):
-        self.my_sender = Sender(self.context)
+        self.my_sender = SND(self.context)
         if ms !=0:
             if self.timer == None:
                 self.timer = QTimer()
@@ -658,23 +488,12 @@ class Overlay(QWidget):
         self.number_capture += 1
         self.task_queue.put((self.current_capture.capture,()))
         self.my_sender.add_capture(self.number_capture,self.current_capture)
-        self.current_capture = Capture(self.current_capture.user,self.current_capture.session,
+        self.current_capture = CPT(self.current_capture.user,self.current_capture.session,
                                        self.current_capture.window_name,datetime.now(),
                                        self.current_capture.pos,self.current_capture.size,
                                        self.current_capture.context,
                                        save=True)
-        """
-        if self.packet_send > 0:v
-            if self.number_capture//self.packet_send == self.max_capture:
-                flag = True
-        else :
-            if self.number_capture == self.max_capture:
-                flag = True
-
-        if flag == True:
-            self.task_queue.put((self.my_sender.send_all,()))
-            self.packet_send +=1
-        """
+        
         log("i",f"len sender captures = {len(self.my_sender.captures)}")
         if len(self.my_sender.captures) >= self.max_capture:
             self.task_queue.put((self.my_sender.send_all, ()))
@@ -684,16 +503,12 @@ class Overlay(QWidget):
         print("triggering capture")
 
     def change_capture_state(self,state):
-        """
-        if self.capture_state == True:
-            self.capture_state = False
-        else :
-            self.capture_state = True
-        """
+
         self.capture_state = state
         
 
     def get_display_dict_str(self):
+
         res = ""
         for k,v in self.display_dict.items():
             res += f"{k} : {v}\n"
@@ -707,7 +522,8 @@ class Overlay(QWidget):
         self.generate_interface()
 
     def create_interface(self):
-        self.fullmode = FullModeApp()
+
+        self.fullmode = FMA()
         self.info_widget3 = DI({"analyser":self.display_dict})
 
     def generate_interface(self):
@@ -721,18 +537,11 @@ class Overlay(QWidget):
 
 
     def setup_partial_mode(self):
-        """
-        self.setAttribute(Qt.WA_TransparentForMouseEvents,False) 
-        for c in self.info_widget.findChildren(QWidget):
-            c.setAttribute(Qt.WA_TransparentForMouseEvents,False)
-        for c in self.info_widget2.findChildren(QWidget):
-            c.setAttribute(Qt.WA_TransparentForMouseEvents,False)
-        """
+
         self.fullmode.hide()
-        #self.info_widget.show()
-        #self.info_widget2.show()
-        self.info_widget3.show()
-        
+        if self.display:
+
+            self.info_widget3.show()
         
 
     def setup_full_mode(self):
@@ -743,29 +552,19 @@ class Overlay(QWidget):
         for c in self.fullmode.findChildren(QWidget):
             c.setAttribute(Qt.WA_TransparentForMouseEvents,False)
         self.fullmode.showMaximized()
-        #self.info_widget.hide()
-        #self.info_widget2.hide()
         self.info_widget3.hide()
 
     def set_text2(self,my_dict,color=None):
-        """
-        for k,v in dict.items():
-            self.display_dict[k] = v
 
-        self.info_widget2.set_infos(self.display_dict)
-        self.generate_interface()
-        """
         self.add_dict_to_info(my_dict,"context")
 
     def set_display_widget_infos(self,infos):
         log("d",f"in infos :{infos}")
-        #self.info_widget.set_infos(infos)
-        #self.generate_interface()
+
         self.add_dict_to_info(infos,"infos")
-        #self.info_widget3.set_infos(self.display_dict)
 
     def add_dict_to_info(self,my_dict,name):
-        #print(self.display_dict)
+ 
         self.display_dict[name] = my_dict
         self.info_widget3.set_infos(self.display_dict)
         self.generate_interface()
@@ -798,175 +597,22 @@ class Overlay(QWidget):
         QApplication.quit()
 
 
-class FullModeApp(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle("Full Mode App")
-        self.setWindowFlag(Qt.WindowStaysOnTopHint)
-
-        main_layout = QVBoxLayout(self)
-
-        # ---- MenuBar ----
-        self.menu_bar = QMenuBar()
-        file_menu = QMenu("File", self)
-        edit_menu = QMenu("Edit", self)
-        help_menu = QMenu("Help", self)
-
-        new_action = QAction("New Session", self)
-        new_action.triggered.connect(self.new_session)
-        quit_action = QAction("Quit", self)
-        quit_action.triggered.connect(self.close)
-
-        file_menu.addAction(new_action)
-        file_menu.addAction(quit_action)
-        edit_menu.addAction(QAction("Preferences", self))
-        help_menu.addAction(QAction("About", self))
-
-        self.menu_bar.addMenu(file_menu)
-        self.menu_bar.addMenu(edit_menu)
-        self.menu_bar.addMenu(help_menu)
-        main_layout.setMenuBar(self.menu_bar)
-
-        # ---- Central HBox ----
-        central_layout = QHBoxLayout()
-
-        # Left: sessions & captures tree view with search
-        left_layout = QVBoxLayout()
-        
-        # Search bar
-        self.search_bar = QLineEdit()
-        self.search_bar.setPlaceholderText("Filter sessions/captures...")
-        self.search_bar.textChanged.connect(self.filter_tree)
-        left_layout.addWidget(self.search_bar)
-
-        # Tree
-        self.session_tree = QTreeWidget()
-        self.session_tree.setHeaderHidden(True)
-        self.session_tree.itemDoubleClicked.connect(self.open_analysis)
-        left_layout.addWidget(self.session_tree, 1)
-
-        # Example sessions/captures
-        self.populate_tree()
-
-        central_layout.addLayout(left_layout, 1)
-
-        # Right: main tab area
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setTabsClosable(True)
-        self.tab_widget.tabCloseRequested.connect(self.close_tab)
-        central_layout.addWidget(self.tab_widget, 3)
-
-        main_layout.addLayout(central_layout)
-
-    def populate_tree(self):
-        # Clear tree first
-        self.session_tree.clear()
-
-        session1 = QTreeWidgetItem(["Session 1"])
-        QTreeWidgetItem(session1, ["Capture A"])
-        QTreeWidgetItem(session1, ["Capture B"])
-
-        session2 = QTreeWidgetItem(["Session 2"])
-        QTreeWidgetItem(session2, ["Capture X"])
-        QTreeWidgetItem(session2, ["Capture Y"])
-
-        self.session_tree.addTopLevelItem(session1)
-        self.session_tree.addTopLevelItem(session2)
-
-        self.session_tree.expandAll()
-
-    def filter_tree(self, text):
-        text = text.lower()
-        for i in range(self.session_tree.topLevelItemCount()):
-            session_item = self.session_tree.topLevelItem(i)
-            session_visible = False
-            for j in range(session_item.childCount()):
-                capture_item = session_item.child(j)
-                match = text in capture_item.text(0).lower()
-                capture_item.setHidden(not match)
-                if match:
-                    session_visible = True
-            session_item.setHidden(not session_visible)
-
-    # ---- Functions ----
-    def new_session(self):
-        log("i","New session triggered")
-
-    def open_analysis(self, item, column):
-        if item.parent() is None:
-            return
-        analysis_name = f"{item.parent().text(0)} - {item.text(0)}"
-        tab = QLabel(f"Content of {analysis_name}")
-        self.tab_widget.addTab(tab, analysis_name)
-        self.tab_widget.setCurrentWidget(tab)
-
-    def close_tab(self, index):
-        widget = self.tab_widget.widget(index)
-        if widget:
-            self.tab_widget.removeTab(index)
-            widget.deleteLater()
-
-class Context:
-    def __init__(self,window,user):
-        self.window = window
-        self.user = user
-        self.session = None
-        self.window_name = self.extract_application_from_window_name()
-
-    def extract_application_from_window_name(self):
-
-        my_match = re.search(r'[-—]\s*([^—\-\n]+)\s*$', self.window["name"])
-    
-        if my_match : 
-            log("s",f"match : {my_match.group(1)}")
-            res = re.sub(" ","",my_match.group(1))
-        #return my_match.group(1)mmmmmmm
-
-        else :
-            log("w","not matched the regex")
-            res = re.sub(" ","",self.window["name"])
-        log("d",res)
-        return res
-    
-    def change_window(self,window):
-        self.window = window
-        self.window_name = self.extract_application_from_window_name()
-    
-    #def to_json(self):
-    #    return json.dumps(self.__dict__)
-    
-    def to_json(self):
-        serializable = {k: (list(v) if isinstance(v, tuple) else v) for k,v in self.__dict__.items()}
-        return json.dumps(serializable)
-
-    
-
-def main(window,user_id="test"):
+def main(window,user_id=default_user_id):
     # Global task queue
     task_queue = queue.Queue()
 
-    #task_queue.get()
-
     # Start the worker thread
     threading.Thread(target=worker, daemon=True,args=(task_queue,)).start()
-    #db = Database()
-    #db.create_tables()
-        #if self.context.user == "test":
-        #    self.db.add_user(self.context.user)
-    #log("d",f"{db.show_tables()}")
-    #log("d",f"users  :{db.get_all_items_from_table('users')}")
-
     context = {"window":window,"user":user_id}
-    context = Context(window,user_id)
-    #window_name = extract_application_from_window_name(context)
-    #context["window_name"] = window_name
+    context = CTX(window,user_id)
 
     log("d",f"{window}")
 
     if window:
         log("s",f"Fenêtre active : {window['name']} ({window['size'][0]}x{window['size'][1]})")
         app_qt = QApplication(sys.argv)
-        display_dict = context.__dict__.copy()
+        #display_dict = context.__dict__.copy()
+
         overlay = Overlay(task_queue=task_queue,text="",x=1400,y=600,context=context,display_dict=default_infos3)
         listen_keyboard(overlay,task_queue,context)
         #flisten_mouse(overlay,task_queue,context)
