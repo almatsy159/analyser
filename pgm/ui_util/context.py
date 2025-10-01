@@ -8,6 +8,7 @@ class Context:
         self.user = user
         self.session = None
         self.window_name = self.extract_application_from_window_name()
+        self.app_id = None
 
     def extract_application_from_window_name(self):
 

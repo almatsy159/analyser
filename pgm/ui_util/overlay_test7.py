@@ -1,19 +1,16 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QLabel,QLineEdit, QWidget, QToolButton,QVBoxLayout, QHBoxLayout, QSizePolicy, QTabWidget, QListWidget, QMenuBar, QAction, QDockWidget,QMenu,QTreeWidget,QTreeWidgetItem
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject,QPoint
-from PyQt5.QtGui import QFont
+from PyQt5.QtWidgets import QApplication, QWidget
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
+#from PyQt5.QtGui import QFont
 import subprocess
-import requests
+#import requests
 import re
 from pynput import keyboard,mouse
 
-import mss
-import os
 from datetime import datetime
 
 
 import imageio.v3 as iio
-import io
 from PIL import Image
 
 import queue
@@ -29,10 +26,9 @@ from pgm.ui_util.log import log,init_log
 from pgm.ui_util.db import Database
 import pgm.contract as ct
 
-import time
-import hashlib
+#import time
+#import hashlib
 
-#from display_test3 import DisplayInfo as DI
 from display_widget import DisplayInfo as DI
 from full_mode import FullModeApp as FMA
 from context import Context as CTX
@@ -41,7 +37,6 @@ from capture import Capture as CPT,Sender as SND
 init_log()
 
 # to remove once app in prod !
-#c
 default_user_id = "test"
 default_user_mail = "test@test.test"
 default_user_pwd = "test"
@@ -62,7 +57,7 @@ handler_portal = "http://localhost:5000/portal"
 handler_aggregate = "http://localhost:5000/aggregate"
 
     
-def extract_application_from_window_name(context):
+def extract_application_from_window_name(context:CTX):
     log("i",f"{context}")
 
     log("i",f"{context['window']['name']}")
@@ -82,7 +77,7 @@ def extract_application_from_window_name(context):
     return res
     
 # Worker thread
-def worker(task_queue):
+def action_worker(task_queue:queue.Queue):
     while True:
         #log("d",f"{task_queue}")
         func, args = task_queue.get()
@@ -103,13 +98,46 @@ def worker(task_queue):
             else :
                 log("s",f"task {task_queue}: {func} effectued successfully")
 
-def capture_info(first,second):
+def db_worker(db_queue):
+    db = Database()
+    db.create_tables()  # called once
+    while True:
+        func, args,result_q = db_queue.get()
+        flag_res = False
+        flag = False
+        err = None
+        res = None
+        try:
+            log("i",f"executing {func}")
+            res = func(db, *args)
+            if result_q:
+                flag_res = True
+                result_q.put(res)
+            flag  = True
+            log("s",f"ended try block ! flag should be true : {flag}" if flag_res == False else f"ended try block ! flag should be true : {flag} and there is a result !")
+        except Exception as e:
+            err = e
+            if result_q :
+                result_q.put(res)
+                flag = True
+            log("w",f"Error in DB task: {e}" if flag == False else f"Error in DB Task : {e} but get a result :{res}")
+        finally:
+            db_queue.task_done()
+            if flag == False:
+                log("w",f"couldn't do the task {db_queue} : {func} : {err}")
+            else :
+                log("s",f"task {db_queue}: {func} effectued successfully")
+
+
+
+def capture_info(first:tuple[int,int],second:tuple[int,int]):
     pos = first[0] if first[0]<second[0] else second[0],first[1] if first[1]<second[1] else second[1]
     log("i",f"pos :{pos}")
     size = abs(first[0]-second[0]),abs(first[1]-second[1])
     log("i",f"size :{size}")
     window_info = {"pos":pos,"size":size}
     return window_info
+
 
 def wait_for_two_clicks():
     click_count = 0
@@ -147,7 +175,296 @@ def wait_for_action():
     listener.join()
     return key_pressed
 
-def listen_keyboard(qwidget,task_queue,context):
+            
+def get_active_window():
+    """Retourne le nom et la géométrie (x, y, w, h) de la fenêtre active."""
+    try:
+        # ID de la fenêtre active
+        
+        wid = subprocess.check_output(["xdotool", "getactivewindow"]).decode().strip()
+        # Nom de la fenêtre
+        name = subprocess.check_output(["xdotool", "getwindowname", wid]).decode().strip()
+
+        # Géométrie de la fenêtre
+        geom = subprocess.check_output(["xdotool", "getwindowgeometry", wid]).decode()
+
+        pos, size = None, None
+        for line in geom.splitlines():
+            if "Position" in line:
+                pos = tuple(map(int, line.split()[1].split(',')))
+            if "Geometry" in line:
+                size = tuple(map(int, line.split()[1].split('x')))
+
+        return {"id": wid, "name": name, "pos": pos, "size": size}
+    except subprocess.CalledProcessError:
+        return None
+
+class Communicate(QObject):
+
+    update_text = pyqtSignal(dict)
+    update_mod = pyqtSignal()
+    update_infos = pyqtSignal(dict)
+    update_capture_state = pyqtSignal()
+    update_timer = pyqtSignal(int)
+    update_display = pyqtSignal()
+    update_capture = pyqtSignal(CPT)
+    change_ctx = pyqtSignal(CTX)
+
+class SocketServerThread(threading.Thread):
+    def __init__(self, host='127.0.0.1', port=5002, callback=None):
+        super().__init__()
+        self.host = host
+        self.port = port
+        self.callback = callback
+        self.daemon = True  # Le thread s'arrête avec l'UI
+
+    def run(self):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((self.host, self.port))
+            s.listen()
+            while True:
+                conn, addr = s.accept()
+                with conn:
+                    data = conn.recv(1024)
+                    if data:
+                        #data = data.decode()
+                        log("s",f"recived from handler : {data}")
+                        if self.callback:
+                            log("i",f"data_decoded : {data.decode()}")
+                            data_json_decoded = json.loads(data.decode())
+                            log("i",f"{data_json_decoded}")
+                            # try get ifno from data or create a reciever !!
+                            # data should be formated this way in handler {"from_server":{"message":x,"wait_for":y},"result":{json}to parse it (method in overlay)
+                            self.callback(data_json_decoded)
+                                                  
+class Overlay(QWidget):
+    def __init__(self,context:CTX,task_queue:queue.Queue,db_queue:queue.Queue, text:str="Overlay HUD", x:int=100, y:int=100, w:int=400, h:int=400,display_dict:dict=None,max_capture:int=10):
+        super().__init__()
+        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool)
+
+        screen = QApplication.primaryScreen()
+        size = screen.size()
+        self.w = size.width()
+        self.h = size.height()
+        #self.setAttribute(Qt.WA_TransparentForMouseEvents,True)  # Click-through
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.text = text
+        self.display_dict = display_dict
+        
+        self.capture_state = False
+        
+        self.comm = Communicate()
+        
+        self.comm.update_text.connect(self.set_text2)
+        self.comm.update_mod.connect(self.change_mod)
+        self.comm.update_infos.connect(self.set_display_widget_infos)
+        self.comm.update_capture_state.connect(self.change_capture_state)
+        self.comm.update_timer.connect(self.set_timer)
+        self.comm.update_capture.connect(self.update_capture)
+        self.comm.update_display.connect(self.update_display)
+        self.comm.change_ctx.connect(self.change_ctx)
+
+        self.display = True
+
+        self.timer = None
+        self.current_capture = None
+
+        self.task_queue = task_queue
+        self.db_queue = db_queue
+
+        self.my_sender = None
+        self.number_capture = 0
+        self.max_capture = max_capture
+        self.packet_send = 0
+
+
+        self.context = context
+        
+        #self.db = db
+        """
+        #self.db = Database()
+        self.db.create_tables()
+
+        #log("w",f"user : {context.user} ; exist ? : {self.db.get_user(context.user)}")
+        self.db.create_default_user()
+        log("w",f"user : {context.user} ; exist ? : {self.db.get_user(context.user)}")
+        """
+        #self.db.add_session(self.context.user)
+        #self.db_queue.put((Database.add_session,(self.context.user,),None))
+        make_request(self.db_queue,Database.add_session,(self.context.user,))
+        #log("d",f"sessions : {self.db.get_all_items_from_table('sessions')}")
+        """
+        res_q = queue.Queue()
+        #self.id_session= self.db.get_session(self.context.user)
+        db_queue.put((Database.get_session,(self.context.user,),res_q))
+        self.id_session = res_q.get()
+        """
+        self.id_session = make_request(self.db_queue,Database.get_session,(self.context.user,),True)
+ 
+        if self.id_session == None:
+            log("w","default session id loaded (0)")
+            self.id_session = 0
+        else :
+            log("s",f"session id = {self.id_session}")
+        self.context.session = self.id_session
+        
+        
+        self.server_thread = SocketServerThread(callback=self.comm.update_infos.emit)
+        self.server_thread.start()
+       
+        self.colors = ["red","blue","green"]
+        self.mod = 0
+        self.mods= {0:"partial",1:"full"}
+
+        self.create_interface()
+        self.generate_interface()
+    
+    def update_capture(self,capture:CPT):
+        self.current_capture = capture
+        self.db.add_capture(capture.session,capture.app_id,capture.user)
+    
+    def update_display(self):
+        log("d",f"in update display : {self.display}")
+        if self.mods[self.mod] == "partial":
+            if self.display:
+                self.info_widget3.hide()
+            else:
+                self.info_widget3.show()
+            self.display = not self.display
+
+    def set_timer(self,ms=0):
+        self.my_sender = SND(self.context)
+        if ms !=0:
+            if self.timer == None:
+                self.timer = QTimer()
+                self.timer.setInterval(ms)
+                self.timer.timeout.connect(self.to_trigger)
+                self.timer.start()
+        else:
+            if self.timer != None:
+                self.timer.stop()
+                self.timer = None
+                self.current_capture = None
+                self.my_sender = None
+                self.number_capture = 0
+                self.packet_send = 0
+    
+    def to_trigger(self):
+        flag = False
+        self.number_capture += 1
+        self.task_queue.put((self.current_capture.capture,()))
+        self.my_sender.add_capture(self.number_capture,self.current_capture)
+        self.current_capture = CPT(self.current_capture.user,self.current_capture.session,
+                                       self.current_capture.window_name,datetime.now(),
+                                       self.current_capture.pos,self.current_capture.size,
+                                       self.current_capture.context,
+                                       save=True)
+        
+        log("i",f"len sender captures = {len(self.my_sender.captures)}")
+        if len(self.my_sender.captures) >= self.max_capture:
+            self.task_queue.put((self.my_sender.send_all, ()))
+            #vself.my_sender.captures = {}
+            self.packet_send += 1
+
+        print("triggering capture")
+
+    def change_capture_state(self,state):
+
+        self.capture_state = state
+        
+
+    def get_display_dict_str(self):
+
+        res = ""
+        for k,v in self.display_dict.items():
+            res += f"{k} : {v}\n"
+        return res
+
+
+    def change_mod(self):
+
+        self.mod = (self.mod+1) % len(self.mods)
+        self.display_dict["mode"] = self.mod
+        self.generate_interface()
+
+    def create_interface(self):
+
+        self.fullmode = FMA()
+        self.info_widget3 = DI({"analyser":self.display_dict})
+
+    def generate_interface(self):
+
+        mod = self.mods[self.mod]
+    
+        if mod == "partial" :
+            self.setup_partial_mode()
+        elif mod == "full":
+            self.setup_full_mode()
+
+
+    def setup_partial_mode(self):
+
+        self.fullmode.hide()
+        if self.display:
+
+            self.info_widget3.show()
+        
+
+    def setup_full_mode(self):
+         # Menu bar
+        self.fullmode.activateWindow()
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool)
+
+        for c in self.fullmode.findChildren(QWidget):
+            c.setAttribute(Qt.WA_TransparentForMouseEvents,False)
+        self.fullmode.showMaximized()
+        self.info_widget3.hide()
+
+    def set_text2(self,my_dict:dict,color=None):
+
+        self.add_dict_to_info(my_dict,"context")
+
+    def set_display_widget_infos(self,infos:dict):
+        log("d",f"in infos :{infos}")
+
+        self.add_dict_to_info(infos,"infos")
+
+    def add_dict_to_info(self,my_dict:dict,name:str):
+ 
+        self.display_dict[name] = my_dict
+        self.info_widget3.set_infos(self.display_dict)
+        self.generate_interface()
+
+
+    def parse_display_widget_infos(self,infos):
+        data = infos["result"]
+        status = infos["from_server"]
+        if status["wait_for"] == 0 :
+            log("i","no waiting for more so update display")
+            self.set_display_widget_infos(data)
+        elif status["wait_for"] >= status["message"]:
+            log("i",f"message n_{status['message']} over a total of {status['wait_for']}")
+            infos = self.info_widget.infos
+            for k,v in data.items():
+                infos[k] = v
+            self.set_display_widget_infos(infos)
+        self.generate_interface()
+
+    def change_ctx(self,ctx):
+        self.context = ctx 
+        return self.context 
+
+    def keyPressEvent(self, event):
+
+        if event.key == Qt.Key_Escape:
+            QApplication.quit()
+        
+    def quit(self):
+        QApplication.quit()
+
+
+
+def listen_keyboard(qwidget:Overlay,task_queue:queue.Queue,context:CTX):
 
     pressed = set()
 
@@ -269,7 +586,7 @@ def listen_keyboard(qwidget,task_queue,context):
     listener = keyboard.Listener(on_press=on_press,on_release=on_release)
     listener.start()
 
-def listen_mouse(qwidget,task_queue,context):
+def listen_mouse(qwidget:Overlay,task_queue:queue.Queue,context:CTX):
     
     def on_move(x, y, injected):
 
@@ -303,7 +620,7 @@ def listen_mouse(qwidget,task_queue,context):
         on_scroll=on_scroll)
     listener.start()
        
-def event_appened(context,qwidget=None,to_print=False):
+def event_appened(context:CTX,qwidget:Overlay=None,to_print:bool=False):
     current = get_active_window()
     if current != None:
         if current != context.window:
@@ -311,298 +628,58 @@ def event_appened(context,qwidget=None,to_print=False):
             context.change_window(current)
   
             window_name = context.window_name
-            #app_id = qwidget.db.get_app(app_name=window_name)
+            #app_id = db.get_app(app_name=window_name)
+            app = make_request(qwidget.db_queue,Database.get_app,(None,window_name),True)
+            log("i",f"app : {app}")
+            if app == None:
+                log("i",f"app = None => adding app into db")
+                make_request(qwidget.db_queue,Database.add_app,(window_name,))
+                app = make_request(qwidget.db_queue,Database.get_app,(None,window_name),True)
+                log("i",f"app created : app = {app}") if app != None else log("w","an error occured app = None !")
+
+            app_id = app[0]
+            log("s",f"app id = {app_id}")
+            context.app_id = app_id
             #context.app_id = app_id
 
             to_display = {"window name : ":window_name}
             qwidget.comm.update_text.emit(to_display)
-            context = qwidget.change_ctx(context)
+            qwidget.change_ctx(context)
 
     return context
-            
-def get_active_window():
-    """Retourne le nom et la géométrie (x, y, w, h) de la fenêtre active."""
-    try:
-        # ID de la fenêtre active
-        
-        wid = subprocess.check_output(["xdotool", "getactivewindow"]).decode().strip()
-        # Nom de la fenêtre
-        name = subprocess.check_output(["xdotool", "getwindowname", wid]).decode().strip()
 
-        # Géométrie de la fenêtre
-        geom = subprocess.check_output(["xdotool", "getwindowgeometry", wid]).decode()
+def make_request(db_queue:queue.Queue,db_func:callable,func_arg:tuple=(),need_result:bool=False,timeout:float=1):
+    log("d",f"making a request : {db_func} with args : {func_arg} and awaiting for a result : {need_result} for {timeout} s")
+    res = None
+    if need_result:
+        res_q = queue.Queue()
+        db_queue.put((db_func,func_arg,res_q))
+        try :
+            res = res_q.get(timeout=timeout)
+            log("s",f"request succeded and result is : {res}")
+        except queue.Empty:
+            log("w",f"request timeout no answer")
+            res = None
+    else :
+        db_queue.put((db_func,func_arg,None))
+        log("s",f"succeeding and not waiting for answer")
 
-        pos, size = None, None
-        for line in geom.splitlines():
-            if "Position" in line:
-                pos = tuple(map(int, line.split()[1].split(',')))
-            if "Geometry" in line:
-                size = tuple(map(int, line.split()[1].split('x')))
+    return res
 
-        return {"id": wid, "name": name, "pos": pos, "size": size}
-    except subprocess.CalledProcessError:
-        return None
-
-class Communicate(QObject):
-
-    update_text = pyqtSignal(dict)
-    update_mod = pyqtSignal()
-    update_infos = pyqtSignal(dict)
-    update_capture_state = pyqtSignal()
-    update_timer = pyqtSignal(int)
-    update_display = pyqtSignal()
-    update_capture = pyqtSignal(CPT)
-
-class SocketServerThread(threading.Thread):
-    def __init__(self, host='127.0.0.1', port=5002, callback=None):
-        super().__init__()
-        self.host = host
-        self.port = port
-        self.callback = callback
-        self.daemon = True  # Le thread s'arrête avec l'UI
-
-    def run(self):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind((self.host, self.port))
-            s.listen()
-            while True:
-                conn, addr = s.accept()
-                with conn:
-                    data = conn.recv(1024)
-                    if data:
-                        #data = data.decode()
-                        log("s",f"recived from handler : {data}")
-                        if self.callback:
-                            log("i",f"data_decoded : {data.decode()}")
-                            data_json_decoded = json.loads(data.decode())
-                            log("i",f"{data_json_decoded}")
-                            # try get ifno from data or create a reciever !!
-                            # data should be formated this way in handler {"from_server":{"message":x,"wait_for":y},"result":{json}to parse it (method in overlay)
-                            self.callback(data_json_decoded)
-                                                  
-class Overlay(QWidget):
-    def __init__(self,context,task_queue,db=None, text="Overlay HUD", x=100, y=100, w=400, h=400,display_dict=None,max_capture=10):
-        super().__init__()
-        self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool)
-
-        screen = QApplication.primaryScreen()
-        size = screen.size()
-        self.w = size.width()
-        self.h = size.height()
-        #self.setAttribute(Qt.WA_TransparentForMouseEvents,True)  # Click-through
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.text = text
-        self.display_dict = display_dict
-        
-        self.capture_state = False
-        
-        self.comm = Communicate()
-        
-        self.comm.update_text.connect(self.set_text2)
-        self.comm.update_mod.connect(self.change_mod)
-        self.comm.update_infos.connect(self.set_display_widget_infos)
-        self.comm.update_capture_state.connect(self.change_capture_state)
-        self.comm.update_timer.connect(self.set_timer)
-        self.comm.update_capture.connect(self.update_capture)
-        self.comm.update_display.connect(self.update_display)
-
-        self.display = True
-
-        self.timer = None
-        self.current_capture = None
-        self.task_queue = task_queue
-        self.my_sender = None
-        self.number_capture = 0
-        self.max_capture = max_capture
-        self.packet_send = 0
-
-
-        self.context = context
-        
-        #self.db = db
-        self.db = Database()
-        self.db.create_tables()
-
-        #log("w",f"user : {context.user} ; exist ? : {self.db.get_user(context.user)}")
-        self.db.create_default_user()
-        log("w",f"user : {context.user} ; exist ? : {self.db.get_user(context.user)}")
-        
-        self.db.add_session(self.context.user)
-        log("d",f"sessions : {self.db.get_all_items_from_table('sessions')}")
-        self.id_session= self.db.get_session(self.context.user)
- 
-        if self.id_session == None:
-            log("w","default session id loaded (0)")
-            self.id_session = 0
-        else :
-            log("s",f"session id = {self.id_session}")
-        self.context.session = self.id_session
-        
-        
-        self.server_thread = SocketServerThread(callback=self.comm.update_infos.emit)
-        self.server_thread.start()
-       
-        self.colors = ["red","blue","green"]
-        self.mod = 0
-        self.mods= {0:"partial",1:"full"}
-
-        self.create_interface()
-        self.generate_interface()
-    
-    def update_capture(self,capture:CPT):
-        self.current_capture = capture
-        self.db.add_capture(capture.session,capture.app_id,capture.user)
-    
-    def update_display(self):
-        #
-        print(f"in update display : {self.display}")
-        if self.mods[self.mod] == "partial":
-            if self.display:
-                self.info_widget3.hide()
-            else:
-                self.info_widget3.show()
-            self.display = not self.display
-            
-
-
-    
-    def set_timer(self,ms=0):
-        self.my_sender = SND(self.context)
-        if ms !=0:
-            if self.timer == None:
-                self.timer = QTimer()
-                self.timer.setInterval(ms)
-                self.timer.timeout.connect(self.to_trigger)
-                self.timer.start()
-        else:
-            if self.timer != None:
-                self.timer.stop()
-                self.timer = None
-                self.current_capture = None
-                self.my_sender = None
-                self.number_capture = 0
-                self.packet_send = 0
-    
-    def to_trigger(self):
-        flag = False
-        self.number_capture += 1
-        self.task_queue.put((self.current_capture.capture,()))
-        self.my_sender.add_capture(self.number_capture,self.current_capture)
-        self.current_capture = CPT(self.current_capture.user,self.current_capture.session,
-                                       self.current_capture.window_name,datetime.now(),
-                                       self.current_capture.pos,self.current_capture.size,
-                                       self.current_capture.context,
-                                       save=True)
-        
-        log("i",f"len sender captures = {len(self.my_sender.captures)}")
-        if len(self.my_sender.captures) >= self.max_capture:
-            self.task_queue.put((self.my_sender.send_all, ()))
-            #vself.my_sender.captures = {}
-            self.packet_send += 1
-
-        print("triggering capture")
-
-    def change_capture_state(self,state):
-
-        self.capture_state = state
-        
-
-    def get_display_dict_str(self):
-
-        res = ""
-        for k,v in self.display_dict.items():
-            res += f"{k} : {v}\n"
-        return res
-
-
-    def change_mod(self):
-
-        self.mod = (self.mod+1) % len(self.mods)
-        self.display_dict["mode"] = self.mod
-        self.generate_interface()
-
-    def create_interface(self):
-
-        self.fullmode = FMA()
-        self.info_widget3 = DI({"analyser":self.display_dict})
-
-    def generate_interface(self):
-
-        mod = self.mods[self.mod]
-    
-        if mod == "partial" :
-            self.setup_partial_mode()
-        elif mod == "full":
-            self.setup_full_mode()
-
-
-    def setup_partial_mode(self):
-
-        self.fullmode.hide()
-        if self.display:
-
-            self.info_widget3.show()
-        
-
-    def setup_full_mode(self):
-         # Menu bar
-        self.fullmode.activateWindow()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool)
-
-        for c in self.fullmode.findChildren(QWidget):
-            c.setAttribute(Qt.WA_TransparentForMouseEvents,False)
-        self.fullmode.showMaximized()
-        self.info_widget3.hide()
-
-    def set_text2(self,my_dict,color=None):
-
-        self.add_dict_to_info(my_dict,"context")
-
-    def set_display_widget_infos(self,infos):
-        log("d",f"in infos :{infos}")
-
-        self.add_dict_to_info(infos,"infos")
-
-    def add_dict_to_info(self,my_dict,name):
- 
-        self.display_dict[name] = my_dict
-        self.info_widget3.set_infos(self.display_dict)
-        self.generate_interface()
-
-
-    def parse_display_widget_infos(self,infos):
-        data = infos["result"]
-        status = infos["from_server"]
-        if status["wait_for"] == 0 :
-            log("i","no waiting for more so update display")
-            self.set_display_widget_infos(data)
-        elif status["wait_for"] >= status["message"]:
-            log("i",f"message n_{status['message']} over a total of {status['wait_for']}")
-            infos = self.info_widget.infos
-            for k,v in data.items():
-                infos[k] = v
-            self.set_display_widget_infos(infos)
-        self.generate_interface()
-
-    def change_ctx(self,ctx):
-        self.context = ctx 
-        return self.context
-
-    def keyPressEvent(self, event):
-
-        if event.key == Qt.Key_Escape:
-            QApplication.quit()
-        
-    def quit(self):
-        QApplication.quit()
-
-
-def main(window,user_id=default_user_id):
+def main(window:dict[str,any],user_id:str=default_user_id):
     # Global task queue
     task_queue = queue.Queue()
 
     # Start the worker thread
-    threading.Thread(target=worker, daemon=True,args=(task_queue,)).start()
+    threading.Thread(target=action_worker, daemon=True,args=(task_queue,)).start()
+
+    db_queue = queue.Queue()
+
+    threading.Thread(target=db_worker, daemon=True, args=(db_queue,)).start()
+
+    if user_id == default_user_id:
+        db_queue.put((Database.create_default_user,(default_user_id,default_user_mail,default_user_pwd),None))
+
     context = {"window":window,"user":user_id}
     context = CTX(window,user_id)
 
@@ -613,19 +690,32 @@ def main(window,user_id=default_user_id):
         app_qt = QApplication(sys.argv)
         #display_dict = context.__dict__.copy()
 
-        overlay = Overlay(task_queue=task_queue,text="",x=1400,y=600,context=context,display_dict=default_infos3)
+        overlay = Overlay(task_queue=task_queue,text="",x=1400,y=600,context=context,display_dict=default_infos3,db_queue=db_queue)
         listen_keyboard(overlay,task_queue,context)
-        #flisten_mouse(overlay,task_queue,context)
+        #listen_mouse(overlay,task_queue,context)
         overlay.show()
         
         sys.exit(app_qt.exec_())
     else:
         log("c","Impossible d'obtenir la fenêtre active.")
 
+
+
 if __name__=="__main__":
     window = get_active_window()
+    #print(window)
     user_id = connection.main()
-    if user_id != None:
+    #db = Database()
+    #db.create_tables()
+    
+    #if user_id == None:
+    #    db.create_default_user(default_user_id,default_user_mail,default_user_pwd)
+    #db_queue = queue.Queue()
+
+    #threading.Thread(target=db_worker, daemon=True, args=(db_queue,)).start()
+
+    log("i",f"user = {user_id}"  if user_id != default_user_id else f"default user :{user_id}")
+    if user_id !=None:
         main(window,user_id)
-    else :
+    else : 
         main(window)

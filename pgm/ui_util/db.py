@@ -79,7 +79,9 @@ class Database:
         cursor.execute(f"SELECT * FROM {table}")
         return cursor.fetchall()
 
-    def create_default_user(self):
+    def create_default_user(self,*args):
+        if args :
+            self.add_user(*args)
         if self.get_user(default_user_id) == None: 
             self.add_user(default_user_id,default_user_mail,default_user_pwd)
 
@@ -172,19 +174,27 @@ class Database:
     
     def get_app(self,app_id=None,app_name=None):
         cursor = self.conn.cursor()
-        if app_id==None and app_name == None:
-            return None
-        
-        elif app_id == None:
-            # get app id by name
+        err = None
+        try :
             
-            cursor.execute("SELECT * FROM apps WHERE name = ?",(app_name))
-        elif app_name == None:
-            # get app name by id
+            if app_id==None and app_name == None:
+                return None
         
-            cursor.execute("SELECT * FROM apps WHERE nid = ?",(app_id))
+            elif app_id == None:
+                # get app id by name
+            
+                cursor.execute("SELECT * FROM apps WHERE name = ?",(app_name,))
+            elif app_name == None:
+                # get app name by id
         
-        return cursor.fetchone()
+                cursor.execute("SELECT * FROM apps WHERE id = ?",(app_id,))
+        except sqlite3.Error as err:
+            log("w",f"cloudn't get the app and raised {err}")
+        finally :
+            if err != None:
+                return None
+            else:
+                 return cursor.fetchone()
 
             
 

@@ -160,6 +160,7 @@ class MainWindow(QStackedWidget):
         #self.db = Database()
         self.db = db()
         self.idu = None
+        self.state = False
 
         # Create forms
         self.login_form = LoginForm(self, self.db)
@@ -170,7 +171,18 @@ class MainWindow(QStackedWidget):
         self.addWidget(self.new_user_form)  # index 1
 
         self.setCurrentIndex(0)  # start with login form
-
+    """
+    def closeEvent(self, event):
+        reply = QMessageBox.question(
+            self, "Quit", "Are you sure you want to quit?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.state = True
+            event.accept()   # allow closing
+        else:
+            event.ignore()   # cancel closing
+    """
 
 def main():
     app = QApplication(sys.argv)
@@ -193,6 +205,7 @@ if __name__ == "__main__":
     window.show()
     app.exec_()
     print(window.idu)
+    print(window.state)
     if window.idu != None:
         print(f"connected as {window.idu} launching app.")
     else :
