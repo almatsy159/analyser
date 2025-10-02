@@ -16,3 +16,5 @@ save/
 
 !setup.py
 !log.py
+
+test_img/
