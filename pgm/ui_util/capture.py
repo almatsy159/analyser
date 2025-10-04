@@ -1,4 +1,4 @@
-from log import log
+from pgm.ui_util.log import log
 import os
 import mss
 import requests

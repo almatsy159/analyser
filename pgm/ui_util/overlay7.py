@@ -18,7 +18,7 @@ import threading
 
 import json
 import socket
-import connection
+import pgm.ui_util.connection as connection
 
 #import sqlite3
 #from loguru import logger v
@@ -29,10 +29,10 @@ import pgm.contract as ct
 #import time
 #import hashlib
 
-from display_widget import DisplayInfo as DI
-from full_mode import FullModeApp as FMA
-from context import Context as CTX
-from capture import Capture as CPT,Sender as SND,SenderFeed as SNDF
+from pgm.ui_util.display_widget import DisplayInfo as DI
+from pgm.ui_util.full_mode import FullModeApp as FMA
+from pgm.ui_util.context import Context as CTX
+from pgm.ui_util.capture import Capture as CPT,Sender as SND,SenderFeed as SNDF
 
 
 

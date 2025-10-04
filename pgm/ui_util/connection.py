@@ -1,5 +1,4 @@
 import sys
-import sqlite3
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit,
     QPushButton, QVBoxLayout, QStackedWidget, QMessageBox
@@ -119,6 +118,7 @@ class MainWindow(QStackedWidget):
         super().__init__()
         #self.db = Database()
         self.db = db()
+        self.db.create_tables()
         self.idu = None
         self.state = False
 
