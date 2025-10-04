@@ -1,20 +1,32 @@
+# python 
 
 __pycache__/
-data/
+
+.pyc
+.pyo
+
+.env
+log.*
+.venv/
 
 *.db
 setting.*
 setup.*
-.pyc
-.venv/
-log.*
-gpt_conv_links.txt
-gpt*
-save/
-*.lock
+
 *.egg-info
 
 !setup.py
 !log.py
 
+# app
 test_img/
+data/
+save/
+
+gpt_conv_links.txt
+gpt*
+
+# docker
+
+*.log
+*.sqlite3
