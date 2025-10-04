@@ -81,7 +81,7 @@ class Database:
 
     def create_default_user(self,*args):
         if args :
-            self.add_user(*args)
+            self.add_user(args[0],args[1],args[2])
         if self.get_user(default_user_id) == None: 
             self.add_user(default_user_id,default_user_mail,default_user_pwd)
 

@@ -1,4 +1,4 @@
-from pgm.ui_util.db import Database
+from pgm.ui_util.db import Database,default_user_id as duid ,default_user_mail as dum ,default_user_pwd as dup
 import pytest
 import os
 
@@ -71,3 +71,23 @@ def test_get_all_items_from_table(db):
     db.add_user("test","test","test")
     tmp = db.get_user("test")[4]
     assert db.get_all_items_from_table("users") == [(1,"test","test","test",tmp)]
+
+
+def test_create_default_user_with_3args(db):
+    db.create_tables()
+    db.create_default_user("test","test","test")
+    user = db.get_user("test")
+    assert user == (1,"test","test","test",user[4])
+
+def test_create_default_user_with_more_args(db):
+    db.create_tables()
+    db.create_default_user("test","test","test","test","test")
+    user = db.get_user("test")
+    assert user == (1,"test","test","test",user[4])
+
+def test_create_default_user_with_no_args(db):
+    # default in db.py => they may be moved
+    db.create_tables()
+    db.create_default_user()
+    user = db.get_user("test")
+    assert user == (1,duid,dum,dup,user[4])

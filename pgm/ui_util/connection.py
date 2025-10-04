@@ -7,46 +7,6 @@ from PyQt5.QtWidgets import (
 
 from pgm.ui_util.db import Database as db
 
-class Database:
-    def __init__(self, db_name="app.db"):
-        self.conn = sqlite3.connect(db_name)
-        self.create_table()
-
-    def create_table(self):
-        cursor = self.conn.cursor()
-        
-        cursor.execute("""CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    idu TEXT NOT NULL UNIQUE,
-    email TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-        """)
-        self.conn.commit()
-
-    def add_user(self, idu, email, password):
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute("INSERT INTO users (idu, email, password) VALUES (?, ?, ?)", (idu, email, password))
-            self.conn.commit()
-            return True
-        except sqlite3.IntegrityError:
-            return False
-    
-    """
-    def user_exist(self,idu):
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE idu = ?" (idu,))
-        try :
-            cursor.fetchone()[0]
-        except :
-            print("true")
-    """
-    def verify_user(self, idu, password):
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE idu = ? AND password = ?", (idu, password))
-        return cursor.fetchone() is not None
 
 
 class LoginForm(QWidget):
