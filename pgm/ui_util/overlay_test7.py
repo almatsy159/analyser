@@ -32,7 +32,14 @@ import pgm.contract as ct
 from display_widget import DisplayInfo as DI
 from full_mode import FullModeApp as FMA
 from context import Context as CTX
-from capture import Capture as CPT,Sender as SND
+from capture import Capture as CPT,Sender as SND,SenderFeed as SNDF
+
+
+
+"""
+import numpy as np
+from numpy.fft import fft, ifft
+"""
 
 init_log()
 
@@ -85,7 +92,7 @@ def action_worker(task_queue:queue.Queue):
         err = None
         try:
             log(f"executing {func}")
-            func(*args)  # Execute the queued function
+            func(*args)  # Execute the queued functionf
             flag  = True
             log("s",f"ended try block ! flag should be true : {flag}")
         except Exception as e:
@@ -486,6 +493,7 @@ def listen_keyboard(qwidget:Overlay,task_queue:queue.Queue,context:CTX):
         # tmp comment to test SND/CPT
         #task_queue.put((capture_window,(window_info,context)))
         cap = CPT(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
+        cap.capture()
         sender = SND(context)
         # may take sender as attribute ? so instead of add capture , once in cap.capture it add capture automatically at the end (avoid potential conflict in the queue (calling sender with unexisting capture ?))
         task_queue.put((cap.capture,("args to test","arg2 to test")))
@@ -502,6 +510,7 @@ def listen_keyboard(qwidget:Overlay,task_queue:queue.Queue,context:CTX):
         # should call an action in the queue
 
         cap = CPT(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
+        cap.capture()
 
         qwidget.comm.update_capture.emit(cap)
         qwidget.comm.update_timer.emit(100)
@@ -509,8 +518,9 @@ def listen_keyboard(qwidget:Overlay,task_queue:queue.Queue,context:CTX):
     def capture_feed():
         first,second = wait_for_two_clicks()
         window_info = capture_info(first,second)
-        sender = SND(context,addr=handler_aggregate)
+        sender = SNDF(context,addr=handler_aggregate)
         cap = CPT(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
+        cap.capture()
 
         print("capture 0")
         nb_cap = 0
@@ -518,26 +528,40 @@ def listen_keyboard(qwidget:Overlay,task_queue:queue.Queue,context:CTX):
         def on_scroll(x,y,dx,dy,injected=False):
             nonlocal nb_cap,cap
             if dy > 0: 
+                ### NEW
+                nb_cap +=1
+                print(f"capture {nb_cap}")
+                last_cap = cap
+                cap = CPT(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
+                cap.capture()
+                cap.compare()
+                if cap.im_hash != last_cap.im_hash:
+                    sender.add_capture(nb_cap,cap)
+                else :
+                    cap.remove_capture()
+                ### END NEW
                 sender.send_all()
+                log("end capture feed")
                 return False
             else :
                 nb_cap +=1
                 print(f"capture {nb_cap}")
                 last_cap = cap
                 cap = CPT(context.user,context.session,context.window_name,datetime.now(),window_info["pos"],window_info["size"],context)
+                cap.capture()
+                cap.compare()
                 if cap.im_hash != last_cap.im_hash:
                     sender.add_capture(nb_cap,cap)
                 else :
                     cap.remove_capture()
 
-        listener_mouse = mouse.Listener(on_scroll=on_scroll)
-        listener_mouse.start()
-        # f
+        listener_mouse1 = mouse.Listener(on_scroll=on_scroll)
+        listener_mouse1.start()
+        
         
     def escape():
         print("in escape ")
         qwidget.comm.update_display.emit()
-
 
     def leave_app():
         qwidget.quit()
@@ -570,7 +594,8 @@ def listen_keyboard(qwidget:Overlay,task_queue:queue.Queue,context:CTX):
             elif action_key == keyboard.KeyCode.from_char("f"):
                 capture_feed()
             elif action_key == keyboard.KeyCode.from_char("e"):
-                escape()
+                #end_feed_capture()
+                pass
         pressed.discard(key)
         return context
 

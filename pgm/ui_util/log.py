@@ -68,4 +68,5 @@ def log(method, message="",depth=1):
     # Use logger.log() instead of calling logger.info/debug/etc.
     # depth=1 ensures caller info points to the caller of log()
     logger.opt(depth=depth).log(level, message)
+    
     return ""

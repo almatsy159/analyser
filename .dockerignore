@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+*.log
+*.sqlite3
+log.*
+!log.py
+setup.*
+!setup.py
+
+*.egg-info
+
+# app
+test_img/
+save/
+data/
+gpt*
+
+# Git
+.git
+.gitignore
