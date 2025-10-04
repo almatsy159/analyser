@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QVBoxLayout, QStackedWidget, QMessageBox
 )
 
-from db import Database as db
+from pgm.ui_util.db import Database as db
 
 class Database:
     def __init__(self, db_name="app.db"):

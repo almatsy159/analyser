@@ -1,4 +1,4 @@
-from log import log,init_log
+from pgm.ui_util.log import log,init_log
 import sqlite3
 import json
 

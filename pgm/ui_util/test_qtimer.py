@@ -5,38 +5,39 @@ from PyQt5.QtWidgets import QApplication, QLabel, QPushButton, QVBoxLayout, QWid
 class Controller(QObject):
     stop_signal = pyqtSignal()  # custom signal to stop timer
 
+if __name__ == "__main__":
+    app = QApplication([])
 
-app = QApplication([])
+    window = QWidget()
+    layout = QVBoxLayout(window)
 
-window = QWidget()
-layout = QVBoxLayout(window)
+    label = QLabel("Waiting...")
+    layout.addWidget(label)
 
-label = QLabel("Waiting...")
-layout.addWidget(label)
+    start_button = QPushButton("Start Timer")
+    stop_button = QPushButton("Stop Timer")
+    layout.addWidget(start_button)
+    layout.addWidget(stop_button)
 
-start_button = QPushButton("Start Timer")
-stop_button = QPushButton("Stop Timer")
-layout.addWidget(start_button)
-layout.addWidget(stop_button)
+    window.show()
 
-window.show()
+    # Create timer
+    timer = QTimer()
+    timer.setInterval(500)  # 1000 ms = 1 second
 
-# Create timer
-timer = QTimer()
-timer.setInterval(500)  # 1000 ms = 1 second
+    # Function to trigger periodically
+    def update_label():
+        label.setText("Tick...")
 
-# Function to trigger periodically
-def update_label():
-    label.setText("Tick...")
+    # Connect timer timeout to function
+    timer.timeout.connect(update_label)
 
-# Connect timer timeout to function
-timer.timeout.connect(update_label)
+    # Start button starts the timer
+    start_button.clicked.connect(lambda: timer.start())
 
-# Start button starts the timer
-start_button.clicked.connect(lambda: timer.start())
-
-# Stop button stops the timer
-stop_button.clicked.connect(lambda: timer.stop())
+    # Stop button stops the timer
+    stop_button.clicked.connect(lambda: timer.stop())
 
 
-app.exec_()
+    app.exec_()
+
