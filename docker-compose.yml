@@ -1,0 +1,47 @@
+version: "3.9"
+services:
+
+  main:
+    build:
+      context: .
+      dockerfile: Dockerfile.main   # root Dockerfile
+    volumes:
+      - .:/app
+
+  overlay:
+    build:
+      context: ./pgm/ui_util
+      dockerfile: Dockerfile.ui
+    ports:
+      - "5002:5002"
+    depends_on:
+      - handler
+      #- cv_server
+    volumes :
+      - .:/app/ui
+
+  handler:
+    build:
+      context: ./pgm/handler
+      dockerfile: Dockerfile.handler
+    ports:
+      - "5000:5000"
+    volumes : 
+      - .:/app/handler
+  
+  #cv_server:
+  #  build:
+  #    context: ./pgm/cv2
+  #    dockerfile: Dockerfile.cv_server
+  #  ports:
+  #    - "5001:5001"
+  #  depends_on:
+  #    - handler
+  #  volumes :
+  #    - .:/app/cv_server
+
+
+  #ollama:
+  #  image: ollama/ollama:latest  # if you want to containerize Ollama later
+  #  ports:
+  #    - "11434:11434"

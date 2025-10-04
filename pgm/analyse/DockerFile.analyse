@@ -1,0 +1,20 @@
+# Base image
+FROM python:3.11-slim
+
+# Set working directory
+WORKDIR /app/analyse
+
+# Copy dependency files first (for caching)
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies without dev packages
+RUN uv install --no-dev
+
+# Copy service code
+COPY . .
+
+# Expose port if needed
+EXPOSE 5003
+
+# Default command
+CMD ["python3", "analyse.py"]

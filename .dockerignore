@@ -17,7 +17,7 @@ setup.*
 # app
 test_img/
 save/
-data/
+#data/
 gpt*
 
 # Git

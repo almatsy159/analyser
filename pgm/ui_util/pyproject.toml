@@ -36,7 +36,6 @@ dependencies = [
     "scikit-image>=0.25.2",
     "scikit-learn>=1.7.2",
     "spacy>=3.8.7",
-    "uvicorn>=0.37.0",
 ]
 
 # ===========================
